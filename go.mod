@@ -6,6 +6,7 @@ require (
 	github.com/ethereum/go-ethereum v1.13.8
 	github.com/gin-contrib/cors v1.5.0
 	github.com/gin-gonic/gin v1.9.1
+	github.com/lib/pq v1.10.9
 	github.com/sirupsen/logrus v1.9.3
 	github.com/swaggo/swag v1.16.2
 	gopkg.in/natefinch/lumberjack.v2 v2.2.1

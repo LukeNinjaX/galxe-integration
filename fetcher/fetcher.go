@@ -16,7 +16,7 @@ type fetcher struct {
 	client              *ethclient.Client
 	blockCache          chan *types.Block
 	blockFetchTaskCache chan uint64
-	dao                 *fetcherDAO
+	dao                 DAO
 	ctx                 context.Context
 	pullInterval        time.Duration
 	retryInterval       time.Duration
@@ -49,7 +49,7 @@ func NewFetcher(ctx context.Context, config *config.FetcherConfig) (common.Fetch
 		client:              client,
 		blockCache:          make(chan *types.Block, config.BlockCacheSize),
 		blockFetchTaskCache: make(chan uint64, config.BlockCacheSize),
-		dao:                 newFetcherDAO(ctx, config.DBConn).init(),
+		dao:                 GetRegistry().GetDAO(ctx, config.DBConn).Init(),
 		pullInterval:        time.Duration(config.PullIntervalMs) * time.Millisecond,
 		retryInterval:       time.Duration(config.RetryIntervalMs) * time.Millisecond,
 		pollThread:          config.PollThread,
@@ -100,7 +100,7 @@ func (f *fetcher) createBlockListener() {
 				continue
 			}
 
-			lastPolledBlockHeight, err := f.dao.getLatestProcessedBlock()
+			lastPolledBlockHeight, err := f.dao.GetLatestProcessedBlock()
 			if err != nil {
 				log.Error("[block listener]: failed to load latest processed block", err)
 				return
@@ -109,13 +109,13 @@ func (f *fetcher) createBlockListener() {
 
 			currentBlock := header.Number.Uint64()
 			for i := lastPolledBlockHeight + 1; i <= currentBlock; i++ {
-				if err := f.dao.addBlock(i, StatusUnprocessed); err != nil {
+				if err := f.dao.AddBlock(i, StatusUnprocessed); err != nil {
 					log.Error("[block listener]: failed to add block task", err)
 					break
 				}
 			}
 
-			unprocessedBlocks, err := f.dao.getUnprocessedBlocks(f.blockMaxRetry)
+			unprocessedBlocks, err := f.dao.GetUnprocessedBlocks(f.blockMaxRetry)
 			if err != nil {
 				log.Error("[block listener]: failed to load processed block", err)
 			} else {
@@ -139,7 +139,7 @@ func (f *fetcher) createEventDispatcher() {
 			return
 		case block := <-f.blockCache:
 			log.Debugf("[event dispatcher]: start dispatching block %d", block.NumberU64())
-			if err := f.dao.migrateBlockStatus(block.NumberU64(), StatusUnprocessed, StatusProcessing); err != nil {
+			if err := f.dao.MigrateBlockStatus(block.NumberU64(), StatusUnprocessed, StatusProcessing); err != nil {
 				log.Errorf("[event dispatcher]: failed to update block status to prcessing: %v", err)
 				continue
 			}
@@ -192,11 +192,11 @@ func (f *fetcher) createEventDispatcher() {
 				}
 			}
 			if processErr != nil {
-				if err := f.dao.markBlockForRetry(block.NumberU64(), f.blockMaxRetry); err != nil {
+				if err := f.dao.MarkBlockForRetry(block.NumberU64(), f.blockMaxRetry); err != nil {
 					log.Errorf("[event dispatcher]: failed to mark block for retry: %v", err)
 				}
 			} else {
-				if err := f.dao.updateBlockStatus(block.NumberU64(), StatusProcessed); err != nil {
+				if err := f.dao.UpdateBlockStatus(block.NumberU64(), StatusProcessed); err != nil {
 					log.Errorf("[event dispatcher]: failed to update block status to processed: %v", err)
 					continue
 				}
@@ -215,7 +215,7 @@ func (f *fetcher) createWorker(index uint64) {
 		case blockNum := <-f.blockFetchTaskCache:
 			log.Debugf("[fetcher worker%d]: start fetching block %d", index, blockNum)
 
-			status, err := f.dao.getBlockStatus(blockNum)
+			status, err := f.dao.GetBlockStatus(blockNum)
 			if err != nil {
 				log.Errorf("[fetcher worker%d]: failed to load block status", err)
 				continue
@@ -250,7 +250,7 @@ func (f *fetcher) monitorStaleProcessingTasks() {
 			return
 		case <-ticker.C:
 			log.Info("[stale processing task monitor]: checking for stale processing tasks")
-			if err := f.dao.resetStaleProcessingBlocks(f.maxProcessingTime); err != nil {
+			if err := f.dao.ResetStaleProcessingBlocks(f.maxProcessingTime); err != nil {
 				log.Errorf("[stale processing task monitor]: failed to reset stale processing blocks: %v", err)
 			}
 		}
