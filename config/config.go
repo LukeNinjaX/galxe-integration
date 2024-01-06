@@ -6,8 +6,14 @@ import (
 
 type Config struct {
 	Notifiers []json.RawMessage `json:"notifiers"`
+	Indexers  []*IndexerConfig  `json:"indexers"`
 	APIServer *APIConfig        `json:"api_server"`
 	Fetcher   *FetcherConfig    `json:"fetcher"`
+}
+
+type IndexerConfig struct {
+	Type   string `json:"type"`
+	Thread uint64 `json:"thread"`
 }
 
 type FetcherConfig struct {

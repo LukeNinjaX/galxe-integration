@@ -66,8 +66,27 @@ func (dao *sqliteDAO) MigrateBlockStatus(blockNumber uint64, from fetcher.BlockS
 	return err
 }
 
-func (dao *sqliteDAO) GetUnprocessedBlocks(retryCount uint64) ([]uint64, error) {
-	rows, err := dao.conn.Query("SELECT block_number FROM block_status WHERE status = 0 and retry_count < ?", retryCount)
+func (dao *sqliteDAO) GetUnprocessedBlocks() ([]uint64, error) {
+	rows, err := dao.conn.Query("SELECT block_number FROM block_status WHERE status = 0")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var blockNumbers []uint64
+	for rows.Next() {
+		var blockNumber uint64
+		if err := rows.Scan(&blockNumber); err != nil {
+			return nil, err
+		}
+		blockNumbers = append(blockNumbers, blockNumber)
+	}
+
+	return blockNumbers, nil
+}
+
+func (dao *sqliteDAO) GetRetryBlocks(maxRetry uint64, retryThreshold time.Duration) ([]uint64, error) {
+	rows, err := dao.conn.Query("SELECT block_number FROM block_status WHERE status = 3 AND retry_count < ? AND (strftime('%s', 'now') - strftime('%s', last_retry_at)) > ?", maxRetry, retryThreshold)
 	if err != nil {
 		return nil, err
 	}

@@ -5,5 +5,5 @@ import (
 )
 
 func init() {
-	indexer.GetRegistry().Register(IndexerName, NewRuleBasedIndexer)
+	indexer.GetRegistry().Register(IndexerName, newRuleBasedIndexer)
 }

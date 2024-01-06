@@ -2,6 +2,7 @@ package fetcher
 
 import (
 	"context"
+	"errors"
 	"github.com/artela-network/galxe-integration/common"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -100,26 +101,38 @@ func (f *fetcher) createBlockListener() {
 				continue
 			}
 
-			lastPolledBlockHeight, err := f.dao.GetLatestProcessedBlock()
+			lastProcessedBlock, err := f.dao.GetLatestProcessedBlock()
 			if err != nil {
 				log.Error("[block listener]: failed to load latest processed block", err)
 				return
 			}
-			lastPolledBlockHeight = max(lastPolledBlockHeight, f.beginBlock)
+			lastProcessedBlock = max(lastProcessedBlock, f.beginBlock-1)
 
 			currentBlock := header.Number.Uint64()
-			for i := lastPolledBlockHeight + 1; i <= currentBlock; i++ {
+			fetchTargetBlock := min(currentBlock, lastProcessedBlock+uint64(cap(f.blockCache)))
+			for i := lastProcessedBlock + 1; i <= fetchTargetBlock; i++ {
 				if err := f.dao.AddBlock(i, StatusUnprocessed); err != nil {
 					log.Error("[block listener]: failed to add block task", err)
 					break
 				}
 			}
 
-			unprocessedBlocks, err := f.dao.GetUnprocessedBlocks(f.blockMaxRetry)
+			unprocessedBlocks, err := f.dao.GetUnprocessedBlocks()
 			if err != nil {
 				log.Error("[block listener]: failed to load processed block", err)
 			} else {
 				for _, block := range unprocessedBlocks {
+					log.Debugf("[block listener]: submitting block task %d", block)
+					f.blockFetchTaskCache <- block
+					log.Debugf("[block listener]: submitted block task %d", block)
+				}
+			}
+
+			retryBlocks, err := f.dao.GetRetryBlocks(f.blockMaxRetry, f.retryInterval)
+			if err != nil {
+				log.Error("[block listener]: failed to load retry block", err)
+			} else {
+				for _, block := range retryBlocks {
 					log.Debugf("[block listener]: submitting block task %d", block)
 					f.blockFetchTaskCache <- block
 					log.Debugf("[block listener]: submitted block task %d", block)
@@ -139,13 +152,8 @@ func (f *fetcher) createEventDispatcher() {
 			return
 		case block := <-f.blockCache:
 			log.Debugf("[event dispatcher]: start dispatching block %d", block.NumberU64())
-			if err := f.dao.MigrateBlockStatus(block.NumberU64(), StatusUnprocessed, StatusProcessing); err != nil {
+			if err := f.dao.UpdateBlockStatus(block.NumberU64(), StatusProcessing); err != nil {
 				log.Errorf("[event dispatcher]: failed to update block status to prcessing: %v", err)
-				continue
-			}
-			receipts, err := f.client.BlockReceipts(f.ctx, rpc.BlockNumberOrHashWithHash(block.Hash(), true))
-			if err != nil {
-				log.Errorf("[event dispatcher]: error fetching block receipts: %v", err)
 				continue
 			}
 			var processErr error
@@ -155,7 +163,12 @@ func (f *fetcher) createEventDispatcher() {
 					continue
 				}
 
-				receipt := receipts[i]
+				receipt, err := f.client.TransactionReceipt(f.ctx, tx.Hash())
+				if err != nil {
+					log.Errorf("[event dispatcher]: error fetching receipt for tx %s: %v", tx.Hash().Hex(), err)
+					processErr = err
+					break
+				}
 				resChs := make([]chan error, 0, len(f.indexers))
 				for _, indexer := range f.indexers {
 					resCh := make(chan error, 1)
@@ -182,7 +195,12 @@ func (f *fetcher) createEventDispatcher() {
 					select {
 					case <-f.ctx.Done():
 						log.Info("[event dispatcher]: stopped")
-					case err := <-resCh:
+					case err, ok := <-resCh:
+						if !ok {
+							log.Errorf("[event dispatcher]: error dispatching event: channel closed")
+							processErr = errors.New("unknown error")
+							break
+						}
 						if err != nil {
 							log.Errorf("[event dispatcher]: error dispatching event: %v", err)
 							processErr = err
@@ -192,6 +210,7 @@ func (f *fetcher) createEventDispatcher() {
 				}
 			}
 			if processErr != nil {
+				log.Errorf("[event dispatcher]: failed to process block %d: %v", block.NumberU64(), processErr)
 				if err := f.dao.MarkBlockForRetry(block.NumberU64(), f.blockMaxRetry); err != nil {
 					log.Errorf("[event dispatcher]: failed to mark block for retry: %v", err)
 				}
@@ -221,7 +240,7 @@ func (f *fetcher) createWorker(index uint64) {
 				continue
 			}
 
-			if status != StatusUnprocessed {
+			if status != StatusUnprocessed && status != StatusRetry {
 				log.Debugf("[fetcher worker%d]: block %d is already processed or processing, skipping", index, blockNum)
 				continue
 			}

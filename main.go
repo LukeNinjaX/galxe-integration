@@ -7,6 +7,7 @@ import (
 	"github.com/artela-network/galxe-integration/api"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/fetcher"
+	"github.com/artela-network/galxe-integration/indexer"
 	"github.com/artela-network/galxe-integration/logging"
 	_ "github.com/artela-network/galxe-integration/logging"
 	log "github.com/sirupsen/logrus"
@@ -35,10 +36,16 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	conf := loadConfig(*serviceConf)
-
 	chainFetcher, err := fetcher.NewFetcher(ctx, conf.Fetcher)
 	if err != nil {
 		log.Fatalf("failed to create fetcher: %v", err)
+	}
+	for _, indexerConf := range conf.Indexers {
+		indexerInstance, err := indexer.GetRegistry().GetIndexer(ctx, indexerConf)
+		if err != nil {
+			log.Fatalf("failed to create indexer: %v", err)
+		}
+		chainFetcher.RegisterIndexer(indexerInstance)
 	}
 	chainFetcher.Start()
 

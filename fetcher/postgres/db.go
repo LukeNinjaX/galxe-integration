@@ -17,6 +17,16 @@ type postgresDAO struct {
 	conn *sql.DB
 }
 
+func createIndex(conn *sql.DB, indexName, tableName, columnName string) {
+	query := fmt.Sprintf("CREATE INDEX IF NOT EXISTS %s ON %s (%s);", indexName, tableName, columnName)
+	_, err := conn.Exec(query)
+	if err != nil {
+		log.Fatalf("Error creating index %s: %q", indexName, err)
+	} else {
+		log.Infof("Index %s created successfully.", indexName)
+	}
+}
+
 func newPostgresDAO(ctx context.Context, dbConn string) fetcher.DAO {
 	db, err := sql.Open(driver, dbConn)
 	if err != nil {
@@ -49,6 +59,9 @@ func (dao *postgresDAO) Init() fetcher.DAO {
 		log.Fatal(err)
 	}
 
+	createIndex(dao.conn, "status_index", "block_status", "status")
+	createIndex(dao.conn, "last_retry_at_index", "block_status", "last_retry_at")
+
 	return dao
 }
 
@@ -67,8 +80,27 @@ func (dao *postgresDAO) MigrateBlockStatus(blockNumber uint64, from fetcher.Bloc
 	return err
 }
 
-func (dao *postgresDAO) GetUnprocessedBlocks(retryCount uint64) ([]uint64, error) {
-	rows, err := dao.conn.Query("SELECT block_number FROM block_status WHERE status = 0 AND retry_count < $1", retryCount)
+func (dao *postgresDAO) GetUnprocessedBlocks() ([]uint64, error) {
+	rows, err := dao.conn.Query("SELECT block_number FROM block_status WHERE status = 0")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	var blockNumbers []uint64
+	for rows.Next() {
+		var blockNumber uint64
+		if err := rows.Scan(&blockNumber); err != nil {
+			return nil, err
+		}
+		blockNumbers = append(blockNumbers, blockNumber)
+	}
+
+	return blockNumbers, nil
+}
+
+func (dao *postgresDAO) GetRetryBlocks(maxRetry uint64, retryThreshold time.Duration) ([]uint64, error) {
+	rows, err := dao.conn.Query("SELECT block_number FROM block_status WHERE status = 3 AND retry_count < $1 AND (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) - EXTRACT(EPOCH FROM last_retry_at)) > $2", maxRetry, int64(retryThreshold.Seconds()))
 	if err != nil {
 		return nil, err
 	}
@@ -88,7 +120,7 @@ func (dao *postgresDAO) GetUnprocessedBlocks(retryCount uint64) ([]uint64, error
 
 func (dao *postgresDAO) MarkBlockForRetry(blockNumber uint64, maxRetry uint64) error {
 	_, err := dao.conn.Exec("UPDATE block_status SET status = $1, retry_count = retry_count + 1, last_retry_at = CURRENT_TIMESTAMP WHERE block_number = $2 AND retry_count < $3",
-		fetcher.StatusUnprocessed, blockNumber, maxRetry)
+		fetcher.StatusRetry, blockNumber, maxRetry)
 	return err
 }
 
