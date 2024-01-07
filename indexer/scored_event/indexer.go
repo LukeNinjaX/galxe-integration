@@ -17,7 +17,7 @@ import (
 
 const IndexerName = "ScoredEvent"
 
-var contractAddr = eth.HexToAddress("0x3078dB43Eb63B8115bc62170455cD335a13042A8")
+var contractAddr = eth.HexToAddress("0xA8DF3c46212BDfA525a91F3c2FDb3C199281a60e")
 
 type ScoredEvent struct {
 	Player eth.Address
