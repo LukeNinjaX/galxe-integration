@@ -27,24 +27,11 @@ func createIndex(conn *sql.DB, indexName, tableName, columnName string) {
 	}
 }
 
-func newPostgresDAO(ctx context.Context, dbConn string) fetcher.DAO {
-	db, err := sql.Open(driver, dbConn)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	timeoutCtx, cancel := context.WithDeadline(ctx, time.Now().Add(5*time.Second))
-	defer cancel()
-
-	if err := db.PingContext(timeoutCtx); err != nil {
-		log.Fatal("db is not responding", err)
-	}
-
+func newPostgresDAO(_ context.Context, db *sql.DB) fetcher.DAO {
 	return &postgresDAO{
 		conn: db,
 	}
 }
-
 func (dao *postgresDAO) Init() fetcher.DAO {
 	createTableSQL := `
         CREATE TABLE IF NOT EXISTS block_status (
@@ -52,7 +39,7 @@ func (dao *postgresDAO) Init() fetcher.DAO {
             block_number INTEGER NOT NULL UNIQUE,
             status INTEGER NOT NULL,
             retry_count INTEGER DEFAULT 0,
-            last_retry_at TIMESTAMP
+            last_retry_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP
         );`
 	_, err := dao.conn.Exec(createTableSQL)
 	if err != nil {
@@ -152,7 +139,7 @@ func (dao *postgresDAO) GetBlockStatus(blockNumber uint64) (fetcher.BlockStatus,
 
 func (dao *postgresDAO) ResetStaleProcessingBlocks(threshold time.Duration) error {
 	_, err := dao.conn.Exec(
-		"UPDATE block_status SET status = $1 WHERE status = $2 AND (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) - EXTRACT(EPOCH FROM last_retry_at)) > $3",
+		"UPDATE block_status SET status = $1, last_retry_at = CURRENT_TIMESTAMP WHERE status = $2 AND (EXTRACT(EPOCH FROM CURRENT_TIMESTAMP) - EXTRACT(EPOCH FROM last_retry_at)) > $3",
 		fetcher.StatusUnprocessed, fetcher.StatusProcessing, int64(threshold.Seconds()))
 	return err
 }

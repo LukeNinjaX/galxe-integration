@@ -2,6 +2,7 @@ package noop
 
 import (
 	"context"
+	"database/sql"
 	"github.com/artela-network/galxe-integration/common"
 	"github.com/artela-network/galxe-integration/config"
 	log "github.com/sirupsen/logrus"
@@ -9,7 +10,7 @@ import (
 
 const IndexerName = "Noop"
 
-func newNoopIndexer(ctx context.Context, _ *config.IndexerConfig) (common.Indexer, error) {
+func newNoopIndexer(ctx context.Context, _ *config.IndexerConfig, _ string, _ *sql.DB) (common.Indexer, error) {
 	indexer := &noopIndexer{
 		inputCh: make(chan *common.EventContext, 100),
 		ctx:     ctx,

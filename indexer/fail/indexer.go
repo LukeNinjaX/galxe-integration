@@ -2,6 +2,7 @@ package fail
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/artela-network/galxe-integration/common"
 	"github.com/artela-network/galxe-integration/config"
@@ -10,7 +11,7 @@ import (
 
 const IndexerName = "Fail"
 
-func newFailIndexer(ctx context.Context, _ *config.IndexerConfig) (common.Indexer, error) {
+func newFailIndexer(ctx context.Context, _ *config.IndexerConfig, _ string, _ *sql.DB) (common.Indexer, error) {
 	indexer := &failIndexer{
 		inputCh: make(chan *common.EventContext, 100),
 		ctx:     ctx,

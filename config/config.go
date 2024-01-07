@@ -9,6 +9,12 @@ type Config struct {
 	Indexers  []*IndexerConfig  `json:"indexers"`
 	APIServer *APIConfig        `json:"api_server"`
 	Fetcher   *FetcherConfig    `json:"fetcher"`
+	DB        *DBConfig         `json:"db"`
+}
+
+type DBConfig struct {
+	URL           string `json:"url"`
+	MaxConnection uint64 `json:"max_connection"`
 }
 
 type IndexerConfig struct {
@@ -22,16 +28,12 @@ type FetcherConfig struct {
 	RetryIntervalMs   uint64 `json:"retry_interval_ms"`
 	BeginBlock        uint64 `json:"begin_block"`
 	BlockCacheSize    uint64 `json:"block_cache_size"`
-	DBConn            string `json:"db_conn"`
 	PollThread        uint64 `json:"poll_thread"`
 	BlockMaxRetry     uint64 `json:"block_max_retry"`
 	MaxProcessingTime string `json:"max_processing_time"`
 }
 
 func (c *FetcherConfig) FillDefaults() *FetcherConfig {
-	if c.DBConn == "" {
-		c.DBConn = "sqlite3://:memory:"
-	}
 	if c.EthereumRPCUrl == "" {
 		c.EthereumRPCUrl = "http://localhost:8545"
 	}

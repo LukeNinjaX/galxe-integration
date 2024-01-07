@@ -16,19 +16,7 @@ type sqliteDAO struct {
 	conn *sql.DB
 }
 
-func newSqliteDAO(ctx context.Context, dbConn string) fetcher.DAO {
-	db, err := sql.Open(driver, dbConn)
-	if err != nil {
-		log.Fatal(err)
-	}
-
-	timeoutCtx, cancel := context.WithDeadline(ctx, time.Now().Add(5*time.Second))
-	defer cancel()
-
-	if err := db.PingContext(timeoutCtx); err != nil {
-		log.Fatal("db is not responding", err)
-	}
-
+func newSqliteDAO(_ context.Context, db *sql.DB) fetcher.DAO {
 	return &sqliteDAO{
 		conn: db,
 	}

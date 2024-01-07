@@ -2,6 +2,7 @@ package fetcher
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/artela-network/galxe-integration/common"
 	"github.com/artela-network/galxe-integration/config"
@@ -29,7 +30,7 @@ type fetcher struct {
 	indexers []common.Indexer
 }
 
-func NewFetcher(ctx context.Context, config *config.FetcherConfig) (common.Fetcher, error) {
+func NewFetcher(ctx context.Context, config *config.FetcherConfig, driver string, db *sql.DB) (common.Fetcher, error) {
 	config.FillDefaults()
 
 	rpcClient, err := rpc.DialContext(ctx, config.EthereumRPCUrl)
@@ -50,7 +51,7 @@ func NewFetcher(ctx context.Context, config *config.FetcherConfig) (common.Fetch
 		client:              client,
 		blockCache:          make(chan *types.Block, config.BlockCacheSize),
 		blockFetchTaskCache: make(chan uint64, config.BlockCacheSize),
-		dao:                 GetRegistry().GetDAO(ctx, config.DBConn).Init(),
+		dao:                 GetRegistry().GetDAO(ctx, driver, db).Init(),
 		pullInterval:        time.Duration(config.PullIntervalMs) * time.Millisecond,
 		retryInterval:       time.Duration(config.RetryIntervalMs) * time.Millisecond,
 		pollThread:          config.PollThread,
@@ -72,9 +73,28 @@ func (f *fetcher) Start() {
 		go f.createWorker(i)
 	}
 
+	go f.monitorQueueSizes()
 	go f.createBlockListener()
-	go f.createEventDispatcher()
+
+	for i := uint64(0); i < f.pollThread; i++ {
+		go f.createEventDispatcher()
+	}
+
 	go f.monitorStaleProcessingTasks()
+}
+
+func (f *fetcher) monitorQueueSizes() {
+	for {
+		select {
+		case <-f.ctx.Done():
+			log.Info("[fetcher] stopped")
+			return
+		default:
+			log.Infof("[fetcher] currently there are %d blocks waiting to fetch", len(f.blockFetchTaskCache))
+			log.Infof("[fetcher] currently there are %d blocks waiting to process", len(f.blockCache))
+			time.Sleep(5 * time.Second)
+		}
+	}
 }
 
 func (f *fetcher) createBlockListener() {
@@ -123,8 +143,13 @@ func (f *fetcher) createBlockListener() {
 			} else {
 				for _, block := range unprocessedBlocks {
 					log.Debugf("[block listener]: submitting block task %d", block)
-					f.blockFetchTaskCache <- block
-					log.Debugf("[block listener]: submitted block task %d", block)
+					select {
+					case <-f.ctx.Done():
+						log.Info("[block listener]: stopped")
+						return
+					case f.blockFetchTaskCache <- block:
+						log.Debugf("[block listener]: submitted block task %d", block)
+					}
 				}
 			}
 
@@ -134,8 +159,13 @@ func (f *fetcher) createBlockListener() {
 			} else {
 				for _, block := range retryBlocks {
 					log.Debugf("[block listener]: submitting block task %d", block)
-					f.blockFetchTaskCache <- block
-					log.Debugf("[block listener]: submitted block task %d", block)
+					select {
+					case <-f.ctx.Done():
+						log.Info("[block listener]: stopped")
+						return
+					case f.blockFetchTaskCache <- block:
+						log.Debugf("[block listener]: submitted block task %d", block)
+					}
 				}
 			}
 
@@ -251,8 +281,13 @@ func (f *fetcher) createWorker(index uint64) {
 				continue
 			}
 
-			f.blockCache <- block
-			log.Debugf("[fetcher worker%d]: fetched block %d", index, blockNum)
+			select {
+			case <-f.ctx.Done():
+				log.Infof("[fetcher worker%d]: stopped", index)
+				return
+			case f.blockCache <- block:
+				log.Debugf("[fetcher worker%d]: fetched block %d", index, blockNum)
+			}
 		}
 	}
 }

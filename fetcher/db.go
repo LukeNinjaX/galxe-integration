@@ -2,8 +2,7 @@ package fetcher
 
 import (
 	"context"
-	"log"
-	"strings"
+	"database/sql"
 	"sync"
 	"time"
 )
@@ -30,7 +29,7 @@ type DAO interface {
 	ResetStaleProcessingBlocks(threshold time.Duration) error
 }
 
-type Builder func(ctx context.Context, dbConn string) DAO
+type Builder func(ctx context.Context, db *sql.DB) DAO
 
 var registry Registry
 
@@ -42,20 +41,14 @@ func (r *Registry) Register(tpy string, builder Builder) {
 	r.daos.Store(tpy, builder)
 }
 
-func (r *Registry) GetDAO(ctx context.Context, dbConn string) DAO {
+func (r *Registry) GetDAO(ctx context.Context, driver string, db *sql.DB) DAO {
 	// Parsing the connection string (assuming it's in PostgreSQL format)
-	split := strings.Split(dbConn, "://")
-	if len(split) != 2 {
-		log.Fatalf("invalid db connection info: %s", dbConn)
-	}
-	driver, conn := split[0], split[1]
-
 	builder, exist := r.daos.Load(driver)
 	if !exist {
 		return nil
 	}
 
-	return builder.(Builder)(ctx, conn)
+	return builder.(Builder)(ctx, db)
 }
 
 func GetRegistry() *Registry {
