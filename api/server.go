@@ -2,6 +2,7 @@ package api
 
 import (
 	"context"
+	"database/sql"
 	"errors"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/gin-contrib/cors"
@@ -10,18 +11,20 @@ import (
 	"io"
 	"net/http"
 	"strconv"
+	"strings"
 	"time"
 )
 
 type Server struct {
 	router *gin.Engine
 	server *http.Server
+	db     *sql.DB
 
 	ctx  context.Context
 	conf *config.APIConfig
 }
 
-func NewServer(ctx context.Context, config *config.APIConfig) *Server {
+func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.DB) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = io.MultiWriter(log.StandardLogger().Out)
 	gin.DefaultErrorWriter = io.MultiWriter(log.StandardLogger().Out)
@@ -55,10 +58,12 @@ func NewServer(ctx context.Context, config *config.APIConfig) *Server {
 			Addr:    config.Host + ":" + strconv.Itoa(int(config.Port)),
 			Handler: r,
 		},
+		db: db,
 	}
 
 	apiGroup := r.Group("/api")
 	apiGroup.GET("/ping", s.ping)
+	apiGroup.GET("/jit-gaming/:address", s.completedJITGaming)
 
 	return s
 }
@@ -66,6 +71,38 @@ func NewServer(ctx context.Context, config *config.APIConfig) *Server {
 func (s *Server) ping(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "pong",
+	})
+}
+
+func (s *Server) completedJITGaming(c *gin.Context) {
+	ethAddress := c.Param("address")
+	if strings.HasPrefix(ethAddress, "/") {
+		ethAddress = ethAddress[1:]
+	}
+	if strings.HasSuffix(ethAddress, "/") {
+		ethAddress = ethAddress[:len(ethAddress)-1]
+	}
+
+	if ethAddress == "" || len(ethAddress) != 42 {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"error": "Missing Ethereum address",
+		})
+		return
+	}
+
+	var exists bool
+	err := s.db.QueryRow("SELECT EXISTS(SELECT 1 FROM scored_players WHERE LOWER(player) = LOWER($1))", ethAddress).Scan(&exists)
+	if err != nil {
+		log.Errorf("Failed to query database: %v", err)
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"error": "Failed to check address",
+		})
+		return
+	}
+
+	// 返回查询结果
+	c.JSON(http.StatusOK, gin.H{
+		"completed": exists,
 	})
 }
 

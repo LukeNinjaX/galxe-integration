@@ -56,7 +56,7 @@ func main() {
 	}
 	chainFetcher.Start()
 
-	apiServer := api.NewServer(ctx, conf.APIServer)
+	apiServer := api.NewServer(ctx, conf.APIServer, driver, conn)
 	apiServer.Start()
 
 	c := make(chan os.Signal, 1)
