@@ -44,7 +44,7 @@ func main() {
 		log.Fatalf("failed to connect to db: %v", err)
 	}
 
-	indexers := make([]common.Indexer, 0)
+	indexers := make([]common.Indexer, len(conf.Indexers))
 	chainFetcher, err := fetcher.NewFetcher(ctx, conf.Fetcher, driver, conn)
 	if err != nil {
 		log.Fatalf("failed to create fetcher: %v", err)
