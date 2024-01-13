@@ -161,16 +161,17 @@ func (s *scoredEventIndexer) Metrics() interface{} {
 }
 
 func (s *scoredEventIndexer) FinishedPlayers() []string {
-	res, err := s.db.Query("SELECT player FROM scored_players")
+	rows, err := s.db.Query("SELECT player FROM scored_players")
 	if err != nil {
 		log.Error("[scored event indexer] failed to insert score", err)
 		return nil
 	}
+	defer rows.Close()
 
 	var players []string
-	for res.Next() {
+	for rows.Next() {
 		var player string
-		if err := res.Scan(&player); err != nil {
+		if err := rows.Scan(&player); err != nil {
 			return nil
 		}
 		players = append(players, player)
