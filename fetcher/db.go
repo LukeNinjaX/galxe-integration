@@ -27,6 +27,8 @@ type DAO interface {
 	GetLatestProcessedBlock() (uint64, error)
 	GetBlockStatus(blockNumber uint64) (BlockStatus, error)
 	ResetStaleProcessingBlocks(threshold time.Duration) error
+	GetCountByBlockStatus(status BlockStatus) (uint64, error)
+	GetMaxProcessedBlockNumber() (uint64, error)
 }
 
 type Builder func(ctx context.Context, db *sql.DB) DAO

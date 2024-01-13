@@ -55,3 +55,11 @@ func (n *failIndexer) Run() {
 		}
 	}()
 }
+
+func (n *failIndexer) Metrics() interface{} {
+	return nil
+}
+
+func (n *failIndexer) Name() string {
+	return IndexerName
+}

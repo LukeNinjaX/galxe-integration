@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"github.com/artela-network/galxe-integration/common"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/gin-contrib/cors"
 	"github.com/gin-gonic/gin"
@@ -22,9 +23,12 @@ type Server struct {
 
 	ctx  context.Context
 	conf *config.APIConfig
+
+	fetcher  common.Fetcher
+	indexers []common.Indexer
 }
 
-func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.DB) *Server {
+func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.DB, fetcher common.Fetcher, indexers []common.Indexer) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = io.MultiWriter(log.StandardLogger().Out)
 	gin.DefaultErrorWriter = io.MultiWriter(log.StandardLogger().Out)
@@ -58,12 +62,15 @@ func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.
 			Addr:    config.Host + ":" + strconv.Itoa(int(config.Port)),
 			Handler: r,
 		},
-		db: db,
+		db:       db,
+		fetcher:  fetcher,
+		indexers: indexers,
 	}
 
 	apiGroup := r.Group("/api")
 	apiGroup.GET("/ping", s.ping)
 	apiGroup.GET("/jit-gaming/:address", s.completedJITGaming)
+	apiGroup.GET("/metrics", s.metrics)
 
 	return s
 }
@@ -71,6 +78,19 @@ func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.
 func (s *Server) ping(c *gin.Context) {
 	c.JSON(200, gin.H{
 		"message": "pong",
+	})
+}
+
+func (s *Server) metrics(c *gin.Context) {
+	indexerMetrics := make(map[string]interface{})
+	for _, indexer := range s.indexers {
+		indexerMetrics[indexer.Name()] = indexer.Metrics()
+	}
+	fetcherMetrics := s.fetcher.Metrics()
+
+	c.JSON(200, gin.H{
+		"fetcher": fetcherMetrics,
+		"indexer": indexerMetrics,
 	})
 }
 

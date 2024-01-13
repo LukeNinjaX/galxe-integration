@@ -143,3 +143,26 @@ func (dao *postgresDAO) ResetStaleProcessingBlocks(threshold time.Duration) erro
 		fetcher.StatusUnprocessed, fetcher.StatusProcessing, int64(threshold.Seconds()))
 	return err
 }
+
+func (dao *postgresDAO) GetCountByBlockStatus(status fetcher.BlockStatus) (uint64, error) {
+	var count uint64
+	row := dao.conn.QueryRow("SELECT COUNT(*) FROM block_status WHERE status = $1", status)
+	err := row.Scan(&count)
+	if err != nil {
+		return 0, err
+	}
+	return count, nil
+}
+
+func (dao *postgresDAO) GetMaxProcessedBlockNumber() (uint64, error) {
+	var maxBlockNumber uint64
+	row := dao.conn.QueryRow("SELECT MAX(block_number) FROM block_status WHERE status = $1", fetcher.StatusProcessed)
+	err := row.Scan(&maxBlockNumber)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return 0, nil
+		}
+		return 0, err
+	}
+	return maxBlockNumber, nil
+}

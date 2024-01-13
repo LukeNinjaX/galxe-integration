@@ -54,3 +54,11 @@ func (n *noopIndexer) Run() {
 		}
 	}()
 }
+
+func (n *noopIndexer) Metrics() interface{} {
+	return nil
+}
+
+func (n *noopIndexer) Name() string {
+	return IndexerName
+}

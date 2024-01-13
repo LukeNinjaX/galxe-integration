@@ -310,3 +310,65 @@ func (f *fetcher) monitorStaleProcessingTasks() {
 		}
 	}
 }
+
+func (f *fetcher) Metrics() interface{} {
+	blockNumber, err := f.client.BlockNumber(f.ctx)
+	if err != nil {
+		log.Error("[fetcher] error fetching latest block number:", err)
+		return nil
+	}
+	highestSyncedBlock, err := f.dao.GetLatestProcessedBlock()
+	if err != nil {
+		log.Error("[fetcher] error fetching highest synced block:", err)
+		return nil
+	}
+	waitingBlocks, err := f.dao.GetCountByBlockStatus(StatusUnprocessed)
+	if err != nil {
+		log.Error("[fetcher] error fetching waiting blocks:", err)
+		return nil
+	}
+	processingBlocks, err := f.dao.GetCountByBlockStatus(StatusProcessing)
+	if err != nil {
+		log.Error("[fetcher] error fetching processing blocks:", err)
+		return nil
+	}
+	processedBlocks, err := f.dao.GetCountByBlockStatus(StatusProcessed)
+	if err != nil {
+		log.Error("[fetcher] error fetching processed blocks:", err)
+		return nil
+	}
+	retryBlocks, err := f.dao.GetCountByBlockStatus(StatusRetry)
+	if err != nil {
+		log.Error("[fetcher] error fetching retry blocks:", err)
+		return nil
+	}
+	blocksWillBeRetried, err := f.dao.GetRetryBlocks(f.blockMaxRetry, f.retryInterval)
+	if err != nil {
+		log.Error("[fetcher] error fetching retry blocks:", err)
+		return nil
+	}
+	blockCacheQueueSize := len(f.blockCache)
+	blockFetchTaskQueueSize := len(f.blockFetchTaskCache)
+
+	return struct {
+		LatestBlock             uint64   `json:"latest_block"`
+		HighestSyncedBlock      uint64   `json:"highest_synced_block"`
+		WaitingBlocks           uint64   `json:"waiting_blocks"`
+		ProcessingBlocks        uint64   `json:"processing_blocks"`
+		ProcessedBlocks         uint64   `json:"processed_blocks"`
+		RetryBlocks             uint64   `json:"retry_blocks"`
+		BlocksWillBeRetried     []uint64 `json:"blocks_will_be_retried"`
+		BlockCacheQueueSize     int      `json:"block_cache_queue_size"`
+		BlockFetchTaskQueueSize int      `json:"block_fetch_task_queue_size"`
+	}{
+		LatestBlock:             blockNumber,
+		HighestSyncedBlock:      highestSyncedBlock,
+		WaitingBlocks:           waitingBlocks,
+		ProcessingBlocks:        processingBlocks,
+		ProcessedBlocks:         processedBlocks,
+		RetryBlocks:             retryBlocks,
+		BlocksWillBeRetried:     blocksWillBeRetried,
+		BlockCacheQueueSize:     blockCacheQueueSize,
+		BlockFetchTaskQueueSize: blockFetchTaskQueueSize,
+	}
+}

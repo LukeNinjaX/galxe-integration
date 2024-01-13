@@ -147,3 +147,15 @@ func (s *scoredEventIndexer) Run() {
 		}()
 	}
 }
+
+func (s *scoredEventIndexer) Metrics() interface{} {
+	return struct {
+		WaitingTx int `json:"waiting_tx"`
+	}{
+		WaitingTx: len(s.inputCh),
+	}
+}
+
+func (s *scoredEventIndexer) Name() string {
+	return IndexerName
+}
