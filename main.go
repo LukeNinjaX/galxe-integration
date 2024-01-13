@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"flag"
 	"github.com/artela-network/galxe-integration/api"
+	"github.com/artela-network/galxe-integration/common"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/db"
 	"github.com/artela-network/galxe-integration/fetcher"
@@ -43,20 +44,22 @@ func main() {
 		log.Fatalf("failed to connect to db: %v", err)
 	}
 
+	indexers := make([]common.Indexer, 0)
 	chainFetcher, err := fetcher.NewFetcher(ctx, conf.Fetcher, driver, conn)
 	if err != nil {
 		log.Fatalf("failed to create fetcher: %v", err)
 	}
-	for _, indexerConf := range conf.Indexers {
+	for i, indexerConf := range conf.Indexers {
 		indexerInstance, err := indexer.GetRegistry().GetIndexer(ctx, indexerConf, driver, conn)
 		if err != nil {
 			log.Fatalf("failed to create indexer: %v", err)
 		}
 		chainFetcher.RegisterIndexer(indexerInstance)
+		indexers[i] = indexerInstance
 	}
 	chainFetcher.Start()
 
-	apiServer := api.NewServer(ctx, conf.APIServer, driver, conn)
+	apiServer := api.NewServer(ctx, conf.APIServer, driver, conn, chainFetcher, indexers)
 	apiServer.Start()
 
 	c := make(chan os.Signal, 1)

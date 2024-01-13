@@ -16,6 +16,16 @@ type sqliteDAO struct {
 	conn *sql.DB
 }
 
+func (dao *sqliteDAO) GetCountByBlockStatus(status fetcher.BlockStatus) (uint64, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
+func (dao *sqliteDAO) GetMaxProcessedBlockNumber() (uint64, error) {
+	//TODO implement me
+	panic("implement me")
+}
+
 func newSqliteDAO(_ context.Context, db *sql.DB) fetcher.DAO {
 	return &sqliteDAO{
 		conn: db,
