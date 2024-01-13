@@ -150,10 +150,43 @@ func (s *scoredEventIndexer) Run() {
 
 func (s *scoredEventIndexer) Metrics() interface{} {
 	return struct {
-		WaitingTx int `json:"waiting_tx"`
+		WaitingTx           int      `json:"waiting_tx"`
+		FinishedPlayerCount uint64   `json:"finished_player_count"`
+		FinishedPlayers     []string `json:"finished_players"`
 	}{
-		WaitingTx: len(s.inputCh),
+		WaitingTx:           len(s.inputCh),
+		FinishedPlayerCount: s.FinishedPlayerCount(),
+		FinishedPlayers:     s.FinishedPlayers(),
 	}
+}
+
+func (s *scoredEventIndexer) FinishedPlayers() []string {
+	res, err := s.db.Query("SELECT player FROM scored_players")
+	if err != nil {
+		log.Error("[scored event indexer] failed to insert score", err)
+		return nil
+	}
+
+	var players []string
+	for res.Next() {
+		var player string
+		if err := res.Scan(&player); err != nil {
+			return nil
+		}
+		players = append(players, player)
+	}
+
+	return players
+}
+
+func (s *scoredEventIndexer) FinishedPlayerCount() uint64 {
+	var count uint64
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM scored_players").Scan(&count); err != nil {
+		log.Error("[scored event indexer] failed to get finished player count", err)
+		return 0
+	}
+
+	return count
 }
 
 func (s *scoredEventIndexer) Name() string {
