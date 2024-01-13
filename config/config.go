@@ -18,8 +18,9 @@ type DBConfig struct {
 }
 
 type IndexerConfig struct {
-	Type   string `json:"type"`
-	Thread uint64 `json:"thread"`
+	Type     string `json:"type"`
+	Thread   uint64 `json:"thread"`
+	Contract string `json:"contract"`
 }
 
 type FetcherConfig struct {

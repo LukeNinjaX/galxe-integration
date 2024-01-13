@@ -17,8 +17,6 @@ import (
 
 const IndexerName = "ScoredEvent"
 
-var contractAddr = eth.HexToAddress("0xA8DF3c46212BDfA525a91F3c2FDb3C199281a60e")
-
 type ScoredEvent struct {
 	Player eth.Address
 	Score  *big.Int
@@ -46,6 +44,7 @@ func newScoredEventIndexer(ctx context.Context, conf *config.IndexerConfig, _ st
 		ctx:         ctx,
 		db:          db,
 		concurrency: conf.Thread,
+		contract:    eth.HexToAddress(conf.Contract),
 	}
 	indexer.Run()
 
@@ -57,6 +56,7 @@ type scoredEventIndexer struct {
 	ctx         context.Context
 	db          *sql.DB
 	concurrency uint64
+	contract    eth.Address
 }
 
 func (s *scoredEventIndexer) Input() chan<- *common.EventContext {
@@ -79,7 +79,7 @@ func (s *scoredEventIndexer) Run() {
 					var err error
 					for _, ethLog := range eventCtx.Receipt.Logs {
 						// Check if the log's address matches the contract address
-						if ethLog.Address != contractAddr {
+						if ethLog.Address != s.contract {
 							log.Debug("[scored event indexer] not target contract address")
 							continue
 						}
