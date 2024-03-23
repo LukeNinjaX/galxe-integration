@@ -4,16 +4,18 @@ import (
 	"context"
 	"database/sql"
 	"errors"
-	"github.com/artela-network/galxe-integration/common"
-	"github.com/artela-network/galxe-integration/config"
-	"github.com/gin-contrib/cors"
-	"github.com/gin-gonic/gin"
-	log "github.com/sirupsen/logrus"
 	"io"
 	"net/http"
 	"strconv"
 	"strings"
 	"time"
+
+	"github.com/gin-contrib/cors"
+	"github.com/gin-gonic/gin"
+	log "github.com/sirupsen/logrus"
+
+	"github.com/artela-network/galxe-integration/common"
+	"github.com/artela-network/galxe-integration/config"
 )
 
 type Server struct {
@@ -71,6 +73,14 @@ func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.
 	apiGroup.GET("/ping", s.ping)
 	apiGroup.GET("/jit-gaming/:address", s.completedJITGaming)
 	apiGroup.GET("/metrics", s.metrics)
+
+	plusGroup := r.Group("/api/goplus/")
+	plusGroup.GET("/tasks/:address", s.getTasks)
+	plusGroup.POST("/new-task", s.newTasks)
+	plusGroup.POST("/update-task", s.updateTask)
+	plusGroup.GET("/rug-pull", s.rugPullInfo)
+	plusGroup.POST("/sync", s.syncStatus)
+	plusGroup.POST("/faucet", s.faucet)
 
 	return s
 }
