@@ -46,7 +46,8 @@ func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.
 
 	// CORS for https://galxe.com and Setup CORS to allow specific origins, methods, and headers
 	r.Use(cors.New(cors.Config{
-		AllowOrigins:     []string{"https://galxe.com"},
+		// AllowOrigins:     []string{"https://galxe.com"},
+		AllowOrigins:     []string{"*"},
 		AllowMethods:     []string{"GET", "POST", "OPTIONS"},
 		AllowHeaders:     []string{"Origin", "Content-Type"},
 		ExposeHeaders:    []string{"Content-Length"},

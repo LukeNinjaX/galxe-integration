@@ -144,12 +144,15 @@ func UpdateTask(db *sql.DB, query UpdateTaskQuery) error {
 	_, err := db.Exec(querySql, args...)
 	return err
 }
-func GetAccountTaskInfo(db *sql.DB, addr string) (AccountTaskInfo, error) {
-
-	taskInfos, err := GetTasks(db, &TaskQuery{
+func GetAccountTaskInfo(db *sql.DB, addr string, taskId string) (AccountTaskInfo, error) {
+	query := &TaskQuery{
 		AccountAddress: addr,
 		TaskGroup:      Task_Group_Normal,
-	})
+	}
+	if taskId != "" {
+		query.ChannelTaskId = taskId
+	}
+	taskInfos, err := GetTasks(db, query)
 	if err != nil {
 		return AccountTaskInfo{}, err
 	}
