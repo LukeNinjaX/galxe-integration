@@ -10,88 +10,155 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const (
+	Task_Group_Normal = "normal"
+	Task_Group_Sys    = "sys"
+)
+
 type UpdateTaskQuery struct {
-	AccountAddress string `json:"address" xml:"address" binding:"required"`
-	TaskName       string `json:"taskName" xml:"taskName" binding:"required"`
+	// update set
+	TaskGroup     *string `json:"taskGroup" xml:"taskGroup" `
+	TaskStatus    *string `json:"taskStatus" xml:"taskStatus"`
+	Memo          *string `json:"memo" xml:"memo" `
+	Txs           *string `json:"txs" xml:"txs" `
+	ChannelTaskId *string `json:"channelTaskId" xml:"channelTaskId"`
+
+	// where condition
+	ID             int64   `json:"id" xml:"id" binding:"required"`
+	AccountAddress *string `json:"accountAddress" xml:"address" binding:"required"`
+	TaskName       *string `json:"taskName" xml:"taskName" `
+}
+type InitTaskQuery struct {
+	AccountAddress string `json:"accountAddress" xml:"address" binding:"required"`
+	ChannelTaskId  string `json:"channelTaskId" xml:"channelTaskId" binding:"required"`
+}
+type TaskQuery struct {
+	AccountAddress string `json:"accountAddress" xml:"address" binding:"required"`
+	ChannelTaskId  string `json:"channelTaskId" xml:"channelTaskId" binding:"required"`
 	TaskStatus     string `json:"taskStatus" xml:"taskStatus" binding:"required"`
-	Memo           string `json:"memo" xml:"memo" binding:"required"`
-	TxHash         string `json:"txHash" xml:"txHash" binding:"required"`
+	TaskGroup      string `json:"taskGroup" xml:"taskGroup" binding:"required"`
+	TaskName       string `json:"taskName" xml:"taskName" binding:"required"`
 }
 
 type AddressTask struct {
 	ID             int64
 	GMTCreate      time.Time
 	GMTModify      time.Time
-	AccountAddress string
-	TaskName       string
+	AccountAddress *string `db:"account_address"`
+	TaskName       *string `db:"task_name"`
 	// 0 init, 1 front done, 2 blockchain  check
-	TaskStatus string
-	Memo       string
-	TxHash     string
+	TaskStatus    *string `db:"task_status"`
+	Memo          *string `db:"memo"`
+	Txs           *string `db:"txs"`
+	ChannelTaskId *string `db:"channel_task_id"`
+	TaskGroup     *string `db:"task_group"`
 }
 type TaskInfo struct {
+	ID         int64  `json:"id,omitempty"`
 	TaskName   string `json:"taskName,omitempty"`
-	TaskStatus int8   `json:"taskStatus,omitempty"`
+	TaskStatus int8   `json:"taskStatus"`
 
-	Title       string `json:"title,omitempty"`
-	Description string `json:"description,omitempty"`
+	Title string `json:"title"`
 }
 
 type AccountTaskInfo struct {
-	AccountAddress string `json:"accountAddress,omitempty"`
+	AccountAddress string `json:"accountAddress"`
 	// 0:no task 1:part finish 2:completed
-	Status    int8       `json:"status,omitempty"`
-	CanSync   bool       `json:"canSync,omitempty"`
+	Status    int8       `json:"status"`
+	CanSync   bool       `json:"canSync"`
 	TaskInfos []TaskInfo `json:"taskInfos,omitempty"`
 }
 
+func InitTask(db *sql.DB, query *InitTaskQuery) error {
+	if query.AccountAddress == "" || query.ChannelTaskId == "" {
+		return fmt.Errorf("address or ChannelTaskId cannot be empty")
+	}
+	// insert db
+	insertSql := "INSERT INTO address_tasks (account_address, task_name,task_status,channel_task_id,task_group) VALUES " +
+		"($1, 'AddLiquidity','0',$2,$3)," +
+		"($1, 'AspectPull', '0',$2,$3)," +
+		"($1, 'RugPull', '0',$2,$3)," +
+		"($1, 'GetFaucet', '0',$2,$3)," +
+		"($1, 'Sync', '0',$2,$4);"
+
+	_, err := db.Exec(insertSql, query.AccountAddress, query.ChannelTaskId, Task_Group_Normal, Task_Group_Sys)
+	if err != nil {
+		return err
+	}
+	return nil
+}
 func UpdateTask(db *sql.DB, query UpdateTaskQuery) error {
 	// 生成 UPDATE 语句
 
-	if query.AccountAddress == "" || query.TaskName == "" {
-		return fmt.Errorf("address or taskName cannot be empty")
+	if query.AccountAddress == nil || query.ID == 0 {
+		return fmt.Errorf("address or id cannot be empty")
 	}
 
 	var queryBuilder strings.Builder
 	var args []interface{}
 
 	queryBuilder.WriteString("UPDATE address_tasks SET ")
-	if query.TaskStatus != "" {
+
+	if query.TaskStatus != nil {
 		queryBuilder.WriteString("task_status = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
 		args = append(args, query.TaskStatus)
 	}
-	if query.Memo != "" {
-		queryBuilder.WriteString("memo = memo || $")
+	if query.Memo != nil {
+		queryBuilder.WriteString("memo = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
 		args = append(args, query.Memo)
 	}
-	if query.TxHash != "" {
-		queryBuilder.WriteString("tx_hash = $")
+	if query.Txs != nil {
+		queryBuilder.WriteString("txs = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
-		args = append(args, query.TxHash)
-
+		args = append(args, query.Txs)
 	}
+	if query.ChannelTaskId != nil {
+		queryBuilder.WriteString("channel_task_id = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
+		args = append(args, query.ChannelTaskId)
+	}
+	queryBuilder.WriteString(" gmt_modify = CURRENT_TIMESTAMP ")
 
+	queryBuilder.WriteString(" WHERE 1=1 ")
+	if query.ID > 0 {
+		queryBuilder.WriteString(" and id = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.ID)
+	}
+	if query.AccountAddress != nil {
+		queryBuilder.WriteString(" and account_address = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.AccountAddress)
+	}
+	if query.TaskName != nil {
+		queryBuilder.WriteString(" and task_name = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.TaskName)
+	}
 	// 去除末尾的逗号和空格
-	queryBuilder.WriteString(" WHERE account_address = $ and task_name = $")
-	queryBuilder.WriteString(fmt.Sprintf("%d", len(args)+1))
-	args = append(args, query.AccountAddress)
-	queryBuilder.WriteString(fmt.Sprintf("%d", len(args)+1))
-	args = append(args, query.TaskName)
-
-	// 去除末尾的逗号和空格
-	updateSql := strings.TrimSuffix(queryBuilder.String(), ", ")
+	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
 
 	// 执行 UPDATE 语句
-	_, err := db.Exec(updateSql, args...)
+	_, err := db.Exec(querySql, args...)
 	return err
 }
 func GetAccountTaskInfo(db *sql.DB, addr string) (AccountTaskInfo, error) {
 
-	taskInfos, err := GetTasks(db, addr)
+	taskInfos, err := GetTasks(db, &TaskQuery{
+		AccountAddress: addr,
+		TaskGroup:      Task_Group_Normal,
+	})
 	if err != nil {
 		return AccountTaskInfo{}, err
+	}
+	if len(taskInfos) == 0 {
+		return AccountTaskInfo{
+			AccountAddress: addr,
+			Status:         0,
+			CanSync:        false,
+		}, nil
 	}
 	return AccountTaskInfo{
 		AccountAddress: addr,
@@ -104,30 +171,32 @@ func GetAccountTaskInfo(db *sql.DB, addr string) (AccountTaskInfo, error) {
 func taskDescription(taskName string) TaskInfo {
 
 	pull := TaskInfo{
-		TaskName:    "RugPull",
-		TaskStatus:  0,
-		Title:       "Rug Pull",
-		Description: "\"Rug Pull\" is a malicious act where liquidity providers on decentralized exchanges like Uniswap suddenly withdraw their provided liquidity, causing a sharp drop in liquidity for a trading pair. This action can severely affect users' ability to trade or result in financial losses. While Uniswap strives to mitigate this risk through community oversight and contract audits, Rug Pulls remain a concern, emphasizing the importance of cautious participation and thorough due diligence on projects and teams before engaging with liquidity pools.",
+		TaskName:   "RugPull",
+		TaskStatus: 0,
+		Title:      "Rug Pull",
 	}
 	aspect := TaskInfo{
-		TaskName:    "AspectPull",
-		TaskStatus:  0,
-		Title:       "Aspect Work",
-		Description: "Aspect is a tool for detecting and blocking suspicious transactions, ideal for preventing Rug Pulls. It operates by continuously monitoring transaction behavior in real-time, identifying potential risk patterns and anomalies. For instance, Rug Pulls often involve sudden, substantial fund withdrawals or transfers. Aspect tracks abrupt spikes in transaction volume, comparing them with historical data. Upon detecting unusual changes, Aspect issues alerts and reviews transactions to confirm any risks.",
+		TaskName:   "AspectPull",
+		TaskStatus: 0,
+		Title:      "Aspect Work",
 	}
 	addLiquidity := TaskInfo{
-		TaskName:    "AddLiquidity",
-		TaskStatus:  0,
-		Title:       "Add Liquidity",
-		Description: "When users add liquidity to a pool, they typically provide an equal value of two different tokens in the pair. For example, in the ETH/DAI trading pair, a user might add an equal value of Ethereum and DAI tokens to the liquidity pool. In return for providing liquidity, users receive liquidity tokens representing their share of the pool. These tokens can be used to withdraw their portion of the liquidity at any time, along with any accumulated trading fees.",
+		TaskName:   "AddLiquidity",
+		TaskStatus: 0,
+		Title:      "Add Liquidity",
 	}
-
+	getFaucet := TaskInfo{
+		TaskName:   "GetFaucet",
+		TaskStatus: 0,
+		Title:      "Get Faucet",
+	}
 	// 把上面3个taskInfo加入到一个map中，key是TaskName
 
 	taskMap := map[string]TaskInfo{
 		pull.TaskName:         pull,
 		aspect.TaskName:       aspect,
 		addLiquidity.TaskName: addLiquidity,
+		getFaucet.TaskName:    getFaucet,
 	}
 	return taskMap[taskName]
 
@@ -136,26 +205,27 @@ func taskInfo(tasks []AddressTask) []TaskInfo {
 	var taskInfos []TaskInfo
 	for _, task := range tasks {
 		// 将字符串转换为int64类型
-		num, err := strconv.ParseInt(task.TaskStatus, 10, 8)
+		num, err := strconv.ParseInt(*task.TaskStatus, 10, 8)
 		if err != nil {
 			fmt.Println("Failed to ParseInt:", err)
 		}
 		// 将int64类型转换为int8类型
 		intValue := int8(num)
 
-		description := taskDescription(task.TaskName)
+		description := taskDescription(*task.TaskName)
 
 		taskInfos = append(taskInfos, TaskInfo{
-			TaskName:    task.TaskName,
-			TaskStatus:  intValue,
-			Title:       description.Title,
-			Description: description.Description,
+			ID:         task.ID,
+			TaskName:   *task.TaskName,
+			TaskStatus: intValue,
+			Title:      description.Title,
 		})
 	}
 	return taskInfos
 
 }
 
+// 是否
 func calculateSyncCondition(tasks []AddressTask) bool {
 	status := calculateStatus(tasks)
 	// 2:completed
@@ -169,7 +239,7 @@ func calculateStatus(tasks []AddressTask) int8 {
 	DoneStatus := "1"
 	count := 0
 	for _, task := range tasks {
-		if task.TaskStatus == DoneStatus {
+		if *task.TaskStatus == DoneStatus {
 			count += 1
 		}
 	}
@@ -183,8 +253,44 @@ func calculateStatus(tasks []AddressTask) int8 {
 	return int8(status)
 }
 
-func GetTasks(db *sql.DB, addr string) ([]AddressTask, error) {
-	rows, err := db.Query("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,tx_hash  FROM address_tasks WHERE account_address = $1", addr)
+func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
+	// 遍历结果集
+	var addressTasks []AddressTask
+	var queryBuilder strings.Builder
+	var args []interface{}
+
+	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,channel_task_id,task_group FROM address_tasks ")
+
+	if query.AccountAddress == "" {
+		return addressTasks, fmt.Errorf("address cannot be empty")
+	}
+	queryBuilder.WriteString(" WHERE account_address = $1 ")
+	args = append(args, query.AccountAddress)
+
+	if query.ChannelTaskId != "" {
+		queryBuilder.WriteString(" and channel_task_id = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.ChannelTaskId)
+	}
+	if query.TaskStatus != "" {
+		queryBuilder.WriteString(" and task_status = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.TaskStatus)
+	}
+	if query.TaskGroup != "" {
+		queryBuilder.WriteString(" and task_group = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.TaskGroup)
+	}
+	if query.TaskName != "" {
+		queryBuilder.WriteString(" and task_name = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.TaskName)
+	}
+	// 去除末尾的逗号和空格
+	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
+
+	rows, err := db.Query(querySql, args...)
 	if err != nil {
 		log.Errorf("Failed to getTasks: %v", err)
 		return nil, err
@@ -197,8 +303,6 @@ func GetTasks(db *sql.DB, addr string) ([]AddressTask, error) {
 		}
 	}(rows)
 
-	// 遍历结果集
-	var addressTasks []AddressTask
 	for rows.Next() {
 		var addressTask AddressTask
 		err := rows.Scan(
@@ -209,7 +313,9 @@ func GetTasks(db *sql.DB, addr string) ([]AddressTask, error) {
 			&addressTask.TaskName,
 			&addressTask.TaskStatus,
 			&addressTask.Memo,
-			&addressTask.TxHash,
+			&addressTask.Txs,
+			&addressTask.ChannelTaskId,
+			&addressTask.TaskGroup,
 		)
 		if err != nil {
 			log.Fatal(err)
@@ -220,19 +326,13 @@ func GetTasks(db *sql.DB, addr string) ([]AddressTask, error) {
 }
 
 func GetTask(db *sql.DB, addr string, taskName string) (AddressTask, error) {
-	var addressTask AddressTask
-	err := db.QueryRow("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,tx_hash  FROM address_tasks WHERE account_address = $1 and task_name = $2", addr, taskName).Scan(
-		&addressTask.ID,
-		&addressTask.GMTCreate,
-		&addressTask.GMTModify,
-		&addressTask.AccountAddress,
-		&addressTask.TaskName,
-		&addressTask.TaskStatus,
-		&addressTask.Memo,
-		&addressTask.TxHash,
-	)
-	if err != nil {
+	addressTask := AddressTask{}
+	tasks, err := GetTasks(db, &TaskQuery{
+		AccountAddress: addr,
+		TaskName:       taskName,
+	})
+	if err != nil || len(tasks) == 0 {
 		return addressTask, err
 	}
-	return addressTask, nil
+	return tasks[0], nil
 }

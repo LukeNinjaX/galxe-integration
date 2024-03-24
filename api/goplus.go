@@ -6,11 +6,17 @@ import (
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
 	log "github.com/sirupsen/logrus"
+
+	"github.com/artela-network/galxe-integration/api/biz"
 )
 
+type UrlInput struct {
+	AccountAddress string `form:"accountAddress" json:"accountAddress" binding:"required"`
+}
+
 func (s *Server) getTasks(c *gin.Context) {
-	addr := c.Param("address")
-	tasks, err := biz.GetAccountTaskInfo(s.db, addr)
+	accountAddress := c.Param("accountAddress")
+	tasks, err := biz.GetAccountTaskInfo(s.db, accountAddress)
 	if err != nil {
 		log.Errorf("Failed to getTasks: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -19,7 +25,6 @@ func (s *Server) getTasks(c *gin.Context) {
 		})
 		return
 	}
-
 	// 返回查询结果
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -27,8 +32,15 @@ func (s *Server) getTasks(c *gin.Context) {
 	})
 }
 func (s *Server) newTasks(c *gin.Context) {
-	address := c.Query("address")
-	tasks, getErr := biz.GetTasks(s.db, address)
+	input := &biz.InitTaskQuery{}
+	if errA := c.ShouldBindBodyWith(&input, binding.JSON); errA != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to new tasks Should BindBody" + errA.Error(),
+		})
+		return
+	}
+	tasks, getErr := biz.GetTasks(s.db, &biz.TaskQuery{AccountAddress: input.AccountAddress, ChannelTaskId: input.ChannelTaskId})
 	if getErr != nil {
 		log.Errorf("Failed to getTasks: %v", getErr)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -38,7 +50,7 @@ func (s *Server) newTasks(c *gin.Context) {
 		return
 	}
 
-	if tasks != nil {
+	if len(tasks) > 0 {
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
 			"message": "Already have tasks",
@@ -47,10 +59,10 @@ func (s *Server) newTasks(c *gin.Context) {
 		return
 	}
 
+	getErr = biz.InitTask(s.db, input)
 	// insert db
-	_, err := s.db.Exec("INSERT INTO address_tasks (account_address, task_name, task_status) VALUES ($1, 'AddLiquidity', '0'),($1, 'AspectPull', '0'),($1, 'RugPull', '0');", address)
-	if err != nil {
-		log.Errorf("Failed to query database: %v", err)
+	if getErr != nil {
+		log.Errorf("Failed to query database: %v", getErr)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
 			"error":   "Failed to new task",
@@ -62,14 +74,13 @@ func (s *Server) newTasks(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 	})
+	return
 }
 
 func (s *Server) updateTask(c *gin.Context) {
 	taskUpQuery := biz.UpdateTaskQuery{}
 
 	if errA := c.ShouldBindBodyWith(&taskUpQuery, binding.JSON); errA == nil {
-
-		c.String(http.StatusOK, `the body should be UpdateTaskQuery`)
 		err := biz.UpdateTask(s.db, taskUpQuery)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
@@ -78,7 +89,6 @@ func (s *Server) updateTask(c *gin.Context) {
 			})
 			return
 		}
-
 		// 返回查询结果
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
