@@ -16,8 +16,8 @@ type UrlInput struct {
 
 func (s *Server) getTasks(c *gin.Context) {
 	accountAddress := c.Param("accountAddress")
-	taskId := c.Param("taskId")
-
+	// taskId := c.Param("taskId")
+	taskId := ""
 	tasks, err := biz.GetAccountTaskInfo(s.db, accountAddress, taskId)
 	if err != nil {
 		log.Errorf("Failed to getTasks: %v", err)
