@@ -81,7 +81,7 @@ func (s *Server) updateTask(c *gin.Context) {
 	taskUpQuery := biz.UpdateTaskQuery{}
 
 	if errA := c.ShouldBindBodyWith(&taskUpQuery, binding.JSON); errA == nil {
-		err := biz.UpdateTask(s.db, taskUpQuery)
+		err := biz.UpdateTask(s.db, &taskUpQuery)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
 				"success": false,
