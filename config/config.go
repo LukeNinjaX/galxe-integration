@@ -10,8 +10,14 @@ type Config struct {
 	APIServer *APIConfig        `json:"api_server"`
 	Fetcher   *FetcherConfig    `json:"fetcher"`
 	DB        *DBConfig         `json:"db"`
+	GoPlus    *GoPlusConfig     `json:"biz_goplus"`
 }
-
+type GoPlusConfig struct {
+	ChannelCode string `json:"channelCode"`
+	ManageId    string `json:"manageId"`
+	ManageKey   string `json:"manageKey"`
+	SecwarexUrl string `json:"secwarexUrl"`
+}
 type DBConfig struct {
 	URL           string `json:"url"`
 	MaxConnection uint64 `json:"max_connection"`

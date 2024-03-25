@@ -4,6 +4,15 @@ import (
 	"context"
 	"encoding/json"
 	"flag"
+	"io"
+	"os"
+	"os/signal"
+	"path"
+	"strings"
+	"syscall"
+
+	log "github.com/sirupsen/logrus"
+
 	"github.com/artela-network/galxe-integration/api"
 	"github.com/artela-network/galxe-integration/common"
 	"github.com/artela-network/galxe-integration/config"
@@ -12,13 +21,6 @@ import (
 	"github.com/artela-network/galxe-integration/indexer"
 	"github.com/artela-network/galxe-integration/logging"
 	_ "github.com/artela-network/galxe-integration/logging"
-	log "github.com/sirupsen/logrus"
-	"io"
-	"os"
-	"os/signal"
-	"path"
-	"strings"
-	"syscall"
 )
 
 func main() {
@@ -59,7 +61,7 @@ func main() {
 	}
 	chainFetcher.Start()
 
-	apiServer := api.NewServer(ctx, conf.APIServer, driver, conn, chainFetcher, indexers)
+	apiServer := api.NewServer(ctx, conf, driver, conn, chainFetcher, indexers)
 	apiServer.Start()
 
 	c := make(chan os.Signal, 1)

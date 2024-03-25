@@ -11,17 +11,17 @@ import (
 )
 
 const (
-	Task_Group_Normal = "normal"
-	Task_Group_Sys    = "sys"
+	Task_Topic_Goplus = "goplus"
+	Task_Topic_Sys    = "sys"
 )
 
 type UpdateTaskQuery struct {
 	// update set
-	TaskGroup     *string `json:"taskGroup" xml:"taskGroup" `
-	TaskStatus    *string `json:"taskStatus" xml:"taskStatus"`
-	Memo          *string `json:"memo" xml:"memo" `
-	Txs           *string `json:"txs" xml:"txs" `
-	ChannelTaskId *string `json:"channelTaskId" xml:"channelTaskId"`
+	TaskTopic  *string `json:"taskTopic" xml:"taskTopic" `
+	TaskStatus *string `json:"taskStatus" xml:"taskStatus"`
+	Memo       *string `json:"memo" xml:"memo" `
+	Txs        *string `json:"txs" xml:"txs" `
+	TaskId     *string `json:"taskId" xml:"taskId"`
 
 	// where condition
 	ID             int64   `json:"id" xml:"id" binding:"required"`
@@ -30,14 +30,15 @@ type UpdateTaskQuery struct {
 }
 type InitTaskQuery struct {
 	AccountAddress string `json:"accountAddress" xml:"address" binding:"required"`
-	ChannelTaskId  string `json:"channelTaskId" xml:"channelTaskId" binding:"required"`
+	TaskId         string `json:"taskId" xml:"taskId"`
+	TaskTopic      string `json:"taskTopic" xml:"taskTopic"`
 }
 type TaskQuery struct {
 	AccountAddress string `json:"accountAddress" xml:"address" binding:"required"`
-	ChannelTaskId  string `json:"channelTaskId" xml:"channelTaskId" binding:"required"`
-	TaskStatus     string `json:"taskStatus" xml:"taskStatus" binding:"required"`
-	TaskGroup      string `json:"taskGroup" xml:"taskGroup" binding:"required"`
-	TaskName       string `json:"taskName" xml:"taskName" binding:"required"`
+	TaskId         string `json:"taskId" xml:"taskId"`
+	TaskStatus     string `json:"taskStatus" xml:"taskStatus" `
+	TaskTopic      string `json:"taskTopic" xml:"taskTopic"`
+	TaskName       string `json:"taskName" xml:"taskName"`
 }
 
 type AddressTask struct {
@@ -47,11 +48,11 @@ type AddressTask struct {
 	AccountAddress *string `db:"account_address"`
 	TaskName       *string `db:"task_name"`
 	// 0 init, 1 front done, 2 blockchain  check
-	TaskStatus    *string `db:"task_status"`
-	Memo          *string `db:"memo"`
-	Txs           *string `db:"txs"`
-	ChannelTaskId *string `db:"channel_task_id"`
-	TaskGroup     *string `db:"task_group"`
+	TaskStatus *string `db:"task_status"`
+	Memo       *string `db:"memo"`
+	Txs        *string `db:"txs"`
+	TaskId     *string `db:"task_id"`
+	TaskTopic  *string `db:"task_topic"`
 }
 type TaskInfo struct {
 	ID         int64  `json:"id,omitempty"`
@@ -70,24 +71,24 @@ type AccountTaskInfo struct {
 }
 
 func InitTask(db *sql.DB, query *InitTaskQuery) error {
-	if query.AccountAddress == "" || query.ChannelTaskId == "" {
-		return fmt.Errorf("address or ChannelTaskId cannot be empty")
+	if query.AccountAddress == "" || query.TaskId == "" {
+		return fmt.Errorf("address or TaskId cannot be empty")
 	}
 	// insert db
-	insertSql := "INSERT INTO address_tasks (account_address, task_name,task_status,channel_task_id,task_group) VALUES " +
+	insertSql := "INSERT INTO address_tasks (account_address, task_name,task_status,task_id,task_topic) VALUES " +
 		"($1, 'AddLiquidity','0',$2,$3)," +
 		"($1, 'AspectPull', '0',$2,$3)," +
 		"($1, 'RugPull', '0',$2,$3)," +
 		"($1, 'GetFaucet', '0',$2,$3)," +
 		"($1, 'Sync', '0',$2,$4);"
 
-	_, err := db.Exec(insertSql, query.AccountAddress, query.ChannelTaskId, Task_Group_Normal, Task_Group_Sys)
+	_, err := db.Exec(insertSql, query.AccountAddress, query.TaskId, Task_Topic_Goplus, Task_Topic_Sys)
 	if err != nil {
 		return err
 	}
 	return nil
 }
-func UpdateTask(db *sql.DB, query UpdateTaskQuery) error {
+func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 	// 生成 UPDATE 语句
 
 	if query.AccountAddress == nil || query.ID == 0 {
@@ -114,10 +115,10 @@ func UpdateTask(db *sql.DB, query UpdateTaskQuery) error {
 		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
 		args = append(args, query.Txs)
 	}
-	if query.ChannelTaskId != nil {
-		queryBuilder.WriteString("channel_task_id = $")
+	if query.TaskId != nil {
+		queryBuilder.WriteString("task_id = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
-		args = append(args, query.ChannelTaskId)
+		args = append(args, query.TaskId)
 	}
 	queryBuilder.WriteString(" gmt_modify = CURRENT_TIMESTAMP ")
 
@@ -144,14 +145,19 @@ func UpdateTask(db *sql.DB, query UpdateTaskQuery) error {
 	_, err := db.Exec(querySql, args...)
 	return err
 }
-func GetAccountTaskInfo(db *sql.DB, addr string, taskId string) (AccountTaskInfo, error) {
+func GetAccountTaskInfo(db *sql.DB, addr string, taskTopic string, taskId string) (AccountTaskInfo, error) {
+	if db == nil || addr == "" {
+		return AccountTaskInfo{}, fmt.Errorf("address cannot be empty")
+	}
 	query := &TaskQuery{
 		AccountAddress: addr,
-		TaskGroup:      Task_Group_Normal,
+		TaskTopic:      taskTopic,
+		TaskId:         taskId,
 	}
-	if taskId != "" {
-		query.ChannelTaskId = taskId
+	if taskTopic == "" {
+		query.TaskTopic = Task_Topic_Goplus
 	}
+
 	taskInfos, err := GetTasks(db, query)
 	if err != nil {
 		return AccountTaskInfo{}, err
@@ -262,7 +268,7 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 	var queryBuilder strings.Builder
 	var args []interface{}
 
-	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,channel_task_id,task_group FROM address_tasks ")
+	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,task_id,task_topic FROM address_tasks ")
 
 	if query.AccountAddress == "" {
 		return addressTasks, fmt.Errorf("address cannot be empty")
@@ -270,20 +276,20 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 	queryBuilder.WriteString(" WHERE account_address = $1 ")
 	args = append(args, query.AccountAddress)
 
-	if query.ChannelTaskId != "" {
-		queryBuilder.WriteString(" and channel_task_id = $")
+	if query.TaskId != "" {
+		queryBuilder.WriteString(" and task_id = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
-		args = append(args, query.ChannelTaskId)
+		args = append(args, query.TaskId)
 	}
 	if query.TaskStatus != "" {
 		queryBuilder.WriteString(" and task_status = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
 		args = append(args, query.TaskStatus)
 	}
-	if query.TaskGroup != "" {
-		queryBuilder.WriteString(" and task_group = $")
+	if query.TaskTopic != "" {
+		queryBuilder.WriteString(" and task_topic = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
-		args = append(args, query.TaskGroup)
+		args = append(args, query.TaskTopic)
 	}
 	if query.TaskName != "" {
 		queryBuilder.WriteString(" and task_name = $")
@@ -317,8 +323,8 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 			&addressTask.TaskStatus,
 			&addressTask.Memo,
 			&addressTask.Txs,
-			&addressTask.ChannelTaskId,
-			&addressTask.TaskGroup,
+			&addressTask.TaskId,
+			&addressTask.TaskTopic,
 		)
 		if err != nil {
 			log.Fatal(err)

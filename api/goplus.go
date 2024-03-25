@@ -16,9 +16,7 @@ type UrlInput struct {
 
 func (s *Server) getTasks(c *gin.Context) {
 	accountAddress := c.Param("accountAddress")
-	// taskId := c.Param("taskId")
-	taskId := ""
-	tasks, err := biz.GetAccountTaskInfo(s.db, accountAddress, taskId)
+	tasks, err := biz.GetAccountTaskInfo(s.db, accountAddress, "", "")
 	if err != nil {
 		log.Errorf("Failed to getTasks: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -42,7 +40,7 @@ func (s *Server) newTasks(c *gin.Context) {
 		})
 		return
 	}
-	tasks, getErr := biz.GetTasks(s.db, &biz.TaskQuery{AccountAddress: input.AccountAddress, ChannelTaskId: input.ChannelTaskId})
+	tasks, getErr := biz.GetTasks(s.db, &biz.TaskQuery{AccountAddress: input.AccountAddress, TaskId: input.TaskId, TaskTopic: input.TaskTopic})
 	if getErr != nil {
 		log.Errorf("Failed to getTasks: %v", getErr)
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -108,21 +106,43 @@ func (s *Server) updateTask(c *gin.Context) {
 
 }
 
-func (s *Server) rugPullInfo(c *gin.Context) {
-	// 返回查询结果
-	c.JSON(http.StatusOK, gin.H{
-		"completed": true,
-	})
-}
-
 func (s *Server) syncStatus(c *gin.Context) {
+	input := &biz.InitTaskQuery{}
+	if errA := c.ShouldBindBodyWith(&input, binding.JSON); errA != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to new tasks Should BindBody" + errA.Error(),
+		})
+		return
+	}
+	if input.AccountAddress == "" || input.TaskId == "" {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Invalid input, missing account address or task id",
+		})
+		return
+	}
 
-	// 返回查询结果
+	err := biz.SyncStatus(s.db, s.conf.GoPlus, input)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to sync status to goplus " + err.Error(),
+		})
+		return
+	}
 	c.JSON(http.StatusOK, gin.H{
-		"completed": true,
+		"success": true,
 	})
 }
 func (s *Server) faucet(c *gin.Context) {
+
+	// 返回查询结果
+	c.JSON(http.StatusOK, gin.H{
+		"completed": true,
+	})
+}
+func (s *Server) rugPullInfo(c *gin.Context) {
 	// 返回查询结果
 	c.JSON(http.StatusOK, gin.H{
 		"completed": true,

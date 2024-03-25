@@ -24,24 +24,24 @@ type Server struct {
 	db     *sql.DB
 
 	ctx  context.Context
-	conf *config.APIConfig
+	conf *config.Config
 
 	fetcher  common.Fetcher
 	indexers []common.Indexer
 }
 
-func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.DB, fetcher common.Fetcher, indexers []common.Indexer) *Server {
+func NewServer(ctx context.Context, config *config.Config, _ string, db *sql.DB, fetcher common.Fetcher, indexers []common.Indexer) *Server {
 	gin.SetMode(gin.ReleaseMode)
 	gin.DefaultWriter = io.MultiWriter(log.StandardLogger().Out)
 	gin.DefaultErrorWriter = io.MultiWriter(log.StandardLogger().Out)
 
 	r := gin.Default()
 
-	if config.Host == "" {
-		config.Host = "127.0.0.1"
+	if config.APIServer.Host == "" {
+		config.APIServer.Host = "127.0.0.1"
 	}
-	if config.Port == 0 {
-		config.Port = 9211
+	if config.APIServer.Port == 0 {
+		config.APIServer.Port = 9211
 	}
 
 	// CORS for https://galxe.com and Setup CORS to allow specific origins, methods, and headers
@@ -62,7 +62,7 @@ func NewServer(ctx context.Context, config *config.APIConfig, _ string, db *sql.
 		conf:   config,
 		ctx:    ctx,
 		server: &http.Server{
-			Addr:    config.Host + ":" + strconv.Itoa(int(config.Port)),
+			Addr:    config.APIServer.Host + ":" + strconv.Itoa(int(config.APIServer.Port)),
 			Handler: r,
 		},
 		db:       db,
