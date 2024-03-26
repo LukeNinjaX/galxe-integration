@@ -22,6 +22,7 @@ type UpdateTaskQuery struct {
 	Memo       *string `json:"memo" xml:"memo" `
 	Txs        *string `json:"txs" xml:"txs" `
 	TaskId     *string `json:"taskId" xml:"taskId"`
+	TxInput    *string `json:"txInput" xml:"txInput"`
 
 	// where condition
 	ID             int64   `json:"id" xml:"id" binding:"required"`
@@ -34,6 +35,7 @@ type InitTaskQuery struct {
 	TaskTopic      string `json:"taskTopic" xml:"taskTopic"`
 }
 type TaskQuery struct {
+	ID             int64  `json:"id" xml:"id" binding:"required"`
 	AccountAddress string `json:"accountAddress" xml:"address" binding:"required"`
 	TaskId         string `json:"taskId" xml:"taskId"`
 	TaskStatus     string `json:"taskStatus" xml:"taskStatus" `
@@ -55,7 +57,7 @@ type AddressTask struct {
 	Txs        *string `db:"txs"`
 	TaskId     *string `db:"task_id"`
 	TaskTopic  *string `db:"task_topic"`
-	Tx_Input   *string `db:"tx_input"`
+	TxInput    *string `db:"tx_input"`
 }
 type TaskInfo struct {
 	ID         int64  `json:"id,omitempty"`
@@ -63,6 +65,8 @@ type TaskInfo struct {
 	TaskStatus int8   `json:"taskStatus"`
 
 	Title string `json:"title"`
+	Memo  string `json:"memo"`
+	Txs   string `json:"txs"`
 }
 
 type AccountTaskInfo struct {
@@ -123,6 +127,11 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
 		args = append(args, query.TaskId)
 	}
+	if query.TxInput != nil {
+		queryBuilder.WriteString("tx_input = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
+		args = append(args, query.TxInput)
+	}
 	queryBuilder.WriteString(" gmt_modify = CURRENT_TIMESTAMP ")
 
 	queryBuilder.WriteString(" WHERE 1=1 ")
@@ -148,17 +157,9 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 	_, err := db.Exec(querySql, args...)
 	return err
 }
-func GetAccountTaskInfo(db *sql.DB, addr string, taskTopic string, taskId string) (AccountTaskInfo, error) {
-	if db == nil || addr == "" {
+func GetAccountTaskInfo(db *sql.DB, query *TaskQuery) (AccountTaskInfo, error) {
+	if db == nil || query == nil {
 		return AccountTaskInfo{}, fmt.Errorf("address cannot be empty")
-	}
-	query := &TaskQuery{
-		AccountAddress: addr,
-		TaskTopic:      taskTopic,
-		TaskId:         taskId,
-	}
-	if taskTopic == "" {
-		query.TaskTopic = Task_Topic_Goplus
 	}
 
 	taskInfos, err := GetTasks(db, query)
@@ -167,13 +168,13 @@ func GetAccountTaskInfo(db *sql.DB, addr string, taskTopic string, taskId string
 	}
 	if len(taskInfos) == 0 {
 		return AccountTaskInfo{
-			AccountAddress: addr,
+			AccountAddress: query.AccountAddress,
 			Status:         0,
 			CanSync:        false,
 		}, nil
 	}
 	return AccountTaskInfo{
-		AccountAddress: addr,
+		AccountAddress: query.AccountAddress,
 		Status:         calculateStatus(taskInfos),
 		CanSync:        calculateSyncCondition(taskInfos),
 		TaskInfos:      taskInfo(taskInfos),
@@ -226,12 +227,22 @@ func taskInfo(tasks []AddressTask) []TaskInfo {
 
 		description := taskDescription(*task.TaskName)
 
-		taskInfos = append(taskInfos, TaskInfo{
+		taskItem := TaskInfo{
 			ID:         task.ID,
-			TaskName:   *task.TaskName,
 			TaskStatus: intValue,
 			Title:      description.Title,
-		})
+		}
+		if task.TaskName != nil {
+			taskItem.TaskName = *task.TaskName
+		}
+		if task.Memo != nil {
+			taskItem.Memo = *task.Memo
+		}
+		if task.Txs != nil {
+			taskItem.Txs = *task.Txs
+		}
+		taskInfos = append(taskInfos, taskItem)
+
 	}
 	return taskInfos
 
@@ -274,7 +285,11 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,task_id,task_topic,tx_input FROM address_tasks ")
 
 	queryBuilder.WriteString(" WHERE 1=1 ")
-
+	if query.ID > 0 {
+		queryBuilder.WriteString(" and id = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.ID)
+	}
 	if query.AccountAddress != "" {
 		queryBuilder.WriteString(" and account_address = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
@@ -335,7 +350,7 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 			&addressTask.Txs,
 			&addressTask.TaskId,
 			&addressTask.TaskTopic,
-			&addressTask.Tx_Input,
+			&addressTask.TxInput,
 		)
 		if err != nil {
 			log.Fatal(err)

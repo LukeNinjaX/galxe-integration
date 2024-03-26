@@ -2,6 +2,7 @@ package api
 
 import (
 	"net/http"
+	"strconv"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -15,8 +16,15 @@ type UrlInput struct {
 }
 
 func (s *Server) getTasks(c *gin.Context) {
-	accountAddress := c.Param("accountAddress")
-	tasks, err := biz.GetAccountTaskInfo(s.db, accountAddress, "", "")
+	accountAddress := c.Query("accountAddress")
+	id := c.Query("id")
+	intId, _ := strconv.ParseInt(id, 10, 64)
+	query := &biz.TaskQuery{
+		AccountAddress: accountAddress,
+		ID:             intId,
+		TaskTopic:      biz.Task_Topic_Goplus,
+	}
+	tasks, err := biz.GetAccountTaskInfo(s.db, query)
 	if err != nil {
 		log.Errorf("Failed to getTasks: %v", err)
 		c.JSON(http.StatusInternalServerError, gin.H{
