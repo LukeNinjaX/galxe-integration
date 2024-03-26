@@ -21,6 +21,7 @@ import (
 	"github.com/artela-network/galxe-integration/indexer"
 	"github.com/artela-network/galxe-integration/logging"
 	_ "github.com/artela-network/galxe-integration/logging"
+	"github.com/artela-network/galxe-integration/rug"
 )
 
 func main() {
@@ -63,6 +64,12 @@ func main() {
 
 	apiServer := api.NewServer(ctx, conf, driver, conn, chainFetcher, indexers)
 	apiServer.Start()
+
+	rugTask, err := rug.NewRug(conn)
+	if err != nil {
+		log.Fatalf("failed to start rug service: %v", err)
+	}
+	rugTask.Start()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGKILL, syscall.SIGINT)
