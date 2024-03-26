@@ -375,7 +375,7 @@ func GetTask(db *sql.DB, addr string, taskName string) (AddressTask, error) {
 func GetFaucetTask(db *sql.DB, limit int) ([]AddressTask, error) {
 	query := &TaskQuery{
 		TaskName:   "GetFaucet",
-		TaskStatus: "0",
+		TaskStatus: "1",
 		LimitNum:   limit,
 	}
 	return GetTasks(db, query)
@@ -384,7 +384,7 @@ func GetFaucetTask(db *sql.DB, limit int) ([]AddressTask, error) {
 func GetAspectPullTask(db *sql.DB, limit int) ([]AddressTask, error) {
 	query := &TaskQuery{
 		TaskName:   "RugPull",
-		TaskStatus: "0",
+		TaskStatus: "1",
 		LimitNum:   limit,
 	}
 	return GetTasks(db, query)

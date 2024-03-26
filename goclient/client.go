@@ -14,11 +14,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type (
-	DeployInstnace func(auth *bind.TransactOpts, backend bind.ContractBackend) (common.Address, *types.Transaction, interface{}, error)
-	NewInstance    func(address common.Address, backend bind.ContractBackend) (interface{}, error)
-)
-
 type Client struct {
 	*ethclient.Client
 }
