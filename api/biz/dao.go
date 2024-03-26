@@ -39,6 +39,8 @@ type TaskQuery struct {
 	TaskStatus     string `json:"taskStatus" xml:"taskStatus" `
 	TaskTopic      string `json:"taskTopic" xml:"taskTopic"`
 	TaskName       string `json:"taskName" xml:"taskName"`
+
+	LimitNum int `json:"limitNum" xml:"limitNum"`
 }
 
 type AddressTask struct {
@@ -270,11 +272,14 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 
 	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,task_id,task_topic FROM address_tasks ")
 
-	if query.AccountAddress == "" {
-		return addressTasks, fmt.Errorf("address cannot be empty")
-	}
-	queryBuilder.WriteString(" WHERE account_address = $1 ")
+	queryBuilder.WriteString(" WHERE 1=1 ")
 	args = append(args, query.AccountAddress)
+
+	if query.AccountAddress != "" {
+		queryBuilder.WriteString(" and account_address = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.AccountAddress)
+	}
 
 	if query.TaskId != "" {
 		queryBuilder.WriteString(" and task_id = $")
@@ -299,7 +304,12 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 	// 去除末尾的逗号和空格
 	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
 
-	rows, err := db.Query(querySql, args...)
+	querySql = querySql + " ORDER BY ID DESC "
+	if query.LimitNum > 0 {
+		querySql = querySql + fmt.Sprintf(" LIMIT %d", query.LimitNum)
+	}
+
+	rows, err := db.Query(querySql+" ORDER BY ID DESC", args...)
 	if err != nil {
 		log.Errorf("Failed to getTasks: %v", err)
 		return nil, err
@@ -344,4 +354,13 @@ func GetTask(db *sql.DB, addr string, taskName string) (AddressTask, error) {
 		return addressTask, err
 	}
 	return tasks[0], nil
+}
+
+func GetFaucetTask(db *sql.DB, limit int) ([]AddressTask, error) {
+	query := &TaskQuery{
+		TaskName:   "GetFaucet",
+		TaskStatus: "0",
+		LimitNum:   limit,
+	}
+	return GetTasks(db, query)
 }
