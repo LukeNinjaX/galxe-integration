@@ -55,6 +55,7 @@ type AddressTask struct {
 	Txs        *string `db:"txs"`
 	TaskId     *string `db:"task_id"`
 	TaskTopic  *string `db:"task_topic"`
+	Tx_Input   *string `db:"tx_input"`
 }
 type TaskInfo struct {
 	ID         int64  `json:"id,omitempty"`
@@ -270,10 +271,9 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 	var queryBuilder strings.Builder
 	var args []interface{}
 
-	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,task_id,task_topic FROM address_tasks ")
+	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,task_id,task_topic,tx_input FROM address_tasks ")
 
 	queryBuilder.WriteString(" WHERE 1=1 ")
-	args = append(args, query.AccountAddress)
 
 	if query.AccountAddress != "" {
 		queryBuilder.WriteString(" and account_address = $")
@@ -309,7 +309,7 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 		querySql = querySql + fmt.Sprintf(" LIMIT %d", query.LimitNum)
 	}
 
-	rows, err := db.Query(querySql+" ORDER BY ID DESC", args...)
+	rows, err := db.Query(querySql, args...)
 	if err != nil {
 		log.Errorf("Failed to getTasks: %v", err)
 		return nil, err
@@ -335,6 +335,7 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 			&addressTask.Txs,
 			&addressTask.TaskId,
 			&addressTask.TaskTopic,
+			&addressTask.Tx_Input,
 		)
 		if err != nil {
 			log.Fatal(err)
@@ -359,6 +360,24 @@ func GetTask(db *sql.DB, addr string, taskName string) (AddressTask, error) {
 func GetFaucetTask(db *sql.DB, limit int) ([]AddressTask, error) {
 	query := &TaskQuery{
 		TaskName:   "GetFaucet",
+		TaskStatus: "0",
+		LimitNum:   limit,
+	}
+	return GetTasks(db, query)
+}
+
+func GetAspectPullTask(db *sql.DB, limit int) ([]AddressTask, error) {
+	query := &TaskQuery{
+		TaskName:   "RugPull",
+		TaskStatus: "0",
+		LimitNum:   limit,
+	}
+	return GetTasks(db, query)
+}
+
+func GetAddLiquidityTask(db *sql.DB, limit int) ([]AddressTask, error) {
+	query := &TaskQuery{
+		TaskName:   "AddLiquidity",
 		TaskStatus: "0",
 		LimitNum:   limit,
 	}
