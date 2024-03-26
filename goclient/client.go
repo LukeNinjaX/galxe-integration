@@ -4,12 +4,10 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"math/big"
-	"os"
 
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/rlp"
 
@@ -34,27 +32,6 @@ func NewClient(url string) (*Client, error) {
 	}
 
 	return &Client{client}, nil
-}
-
-func ReadKey(keyFile string) (*ecdsa.PrivateKey, *ecdsa.PublicKey, error) {
-	privKeyHex, err := os.ReadFile(keyFile)
-	if err != nil {
-		log.Error(err)
-		return nil, nil, err
-	}
-	privateKey, err := crypto.HexToECDSA(string(privKeyHex)[2:])
-	if err != nil {
-		log.Error(err)
-		return nil, nil, err
-	}
-
-	publicKey := privateKey.Public()
-	publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
-	if !ok {
-		log.Error("error casting public key to ECDSA")
-		return nil, nil, err
-	}
-	return privateKey, publicKeyECDSA, nil
 }
 
 func (c *Client) DefaultTxOpts(privateKey *ecdsa.PrivateKey, fromAddress common.Address) *bind.TransactOpts {
