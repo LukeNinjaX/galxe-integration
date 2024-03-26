@@ -55,7 +55,8 @@ func NewRug(db *sql.DB) (*Rug, error) {
 		return nil, err
 	}
 
-	nonce, err := goclient.Client.NonceAt(*c, context.Background(), contractAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
+	accountAddress := crypto.PubkeyToAddress(*pubKey)
+	nonce, err := goclient.Client.NonceAt(*c, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
 	if err != nil {
 		return nil, err
 	}

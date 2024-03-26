@@ -69,7 +69,7 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to start rug service: %v", err)
 	}
-	rugTask.Start()
+	go rugTask.Start()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGKILL, syscall.SIGINT)
