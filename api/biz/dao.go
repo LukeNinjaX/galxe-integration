@@ -393,7 +393,7 @@ func GetAspectPullTask(db *sql.DB, limit int) ([]AddressTask, error) {
 func GetAddLiquidityTask(db *sql.DB, limit int) ([]AddressTask, error) {
 	query := &TaskQuery{
 		TaskName:   "AddLiquidity",
-		TaskStatus: "0",
+		TaskStatus: "1",
 		LimitNum:   limit,
 	}
 	return GetTasks(db, query)

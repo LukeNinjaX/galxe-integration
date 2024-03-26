@@ -89,6 +89,8 @@ func (s *Server) updateTask(c *gin.Context) {
 	taskUpQuery := biz.UpdateTaskQuery{}
 
 	if errA := c.ShouldBindBodyWith(&taskUpQuery, binding.JSON); errA == nil {
+		// txinput 有值 txHash 没有值的话，txhash 设置一下
+
 		err := biz.UpdateTask(s.db, &taskUpQuery)
 		if err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{
