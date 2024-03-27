@@ -28,6 +28,8 @@ type UpdateTaskQuery struct {
 	ID             int64   `json:"id" xml:"id" binding:"required"`
 	AccountAddress *string `json:"accountAddress" xml:"address" binding:"required"`
 	TaskName       *string `json:"taskName" xml:"taskName" `
+	StatusEqual    *string `json:"statusEqual" xml:"statusEqual"`
+	LimitNum       int     `json:"limitNum" xml:"limitNum"`
 }
 type InitTaskQuery struct {
 	AccountAddress string `json:"accountAddress" xml:"address" binding:"required"`
@@ -150,8 +152,18 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
 		args = append(args, query.TaskName)
 	}
+	if query.StatusEqual != nil {
+		queryBuilder.WriteString(" and task_status = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.StatusEqual)
+	}
 	// 去除末尾的逗号和空格
 	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
+
+	querySql = querySql + " ORDER BY ID DESC "
+	if query.LimitNum > 0 {
+		querySql = querySql + fmt.Sprintf(" LIMIT %d", query.LimitNum)
+	}
 
 	// 执行 UPDATE 语句
 	_, err := db.Exec(querySql, args...)
@@ -370,31 +382,4 @@ func GetTask(db *sql.DB, addr string, taskName string) (AddressTask, error) {
 		return addressTask, err
 	}
 	return tasks[0], nil
-}
-
-func GetFaucetTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	query := &TaskQuery{
-		TaskName:   "GetFaucet",
-		TaskStatus: "1",
-		LimitNum:   limit,
-	}
-	return GetTasks(db, query)
-}
-
-func GetAspectPullTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	query := &TaskQuery{
-		TaskName:   "RugPull",
-		TaskStatus: "1",
-		LimitNum:   limit,
-	}
-	return GetTasks(db, query)
-}
-
-func GetAddLiquidityTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	query := &TaskQuery{
-		TaskName:   "AddLiquidity",
-		TaskStatus: "1",
-		LimitNum:   limit,
-	}
-	return GetTasks(db, query)
 }
