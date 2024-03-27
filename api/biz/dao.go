@@ -98,7 +98,7 @@ func InitTask(db *sql.DB, query *InitTaskQuery) error {
 func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 	// 生成 UPDATE 语句
 
-	if query.AccountAddress == nil || query.ID == 0 {
+	if query.AccountAddress == nil && query.ID == 0 {
 		return fmt.Errorf("address or id cannot be empty")
 	}
 

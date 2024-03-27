@@ -21,7 +21,8 @@ import (
 	"github.com/artela-network/galxe-integration/indexer"
 	"github.com/artela-network/galxe-integration/logging"
 	_ "github.com/artela-network/galxe-integration/logging"
-	"github.com/artela-network/galxe-integration/rug"
+	"github.com/artela-network/galxe-integration/onchain/faucet"
+	"github.com/artela-network/galxe-integration/onchain/rug"
 )
 
 func main() {
@@ -69,7 +70,12 @@ func main() {
 	if err != nil {
 		log.Fatalf("failed to start rug service: %v", err)
 	}
-	go rugTask.Start()
+	rugTask.Start()
+	faucet, err := faucet.NewFaucet(conn)
+	if err != nil {
+		log.Fatalf("failed to start rug service: %v", err)
+	}
+	faucet.Start()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGKILL, syscall.SIGINT)

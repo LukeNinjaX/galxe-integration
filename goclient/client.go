@@ -80,3 +80,44 @@ func (c *Client) SendRawMessage(ctx context.Context, msg []byte) (common.Hash, e
 func (c *Client) TransactionReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
 	return c.Client.TransactionReceipt(ctx, hash)
 }
+
+func (c *Client) Transfer(privateKey *ecdsa.PrivateKey, to common.Address, amount int64, nonce uint64) (common.Hash, error) {
+	// publicKey := privateKey.Public()
+	// publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
+	// if !ok {
+	// 	err := errors.New("error casting public key to ECDSA")
+	// 	return common.Hash{}, err
+	// }
+
+	// fromAddress := crypto.PubkeyToAddress(*publicKeyECDSA)
+	// nonce, err := c.PendingNonceAt(context.Background(), fromAddress)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// }
+
+	value := big.NewInt(1000000000000000000 * amount) // in wei (1 eth)
+	gasLimit := uint64(21000)                         // in units
+	gasPrice, err := c.SuggestGasPrice(context.Background())
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	var data []byte
+	tx := types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
+
+	chainID, err := c.NetworkID(context.Background())
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)
+	if err != nil {
+		return common.Hash{}, err
+	}
+
+	err = c.SendTransaction(context.Background(), signedTx)
+	if err != nil {
+		return common.Hash{}, err
+	}
+	return signedTx.Hash(), nil
+}
