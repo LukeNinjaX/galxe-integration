@@ -17,6 +17,7 @@ type Config struct {
 
 type FaucetConfig struct {
 	OnChain
+	TxConfig
 	TransferAmount int64 `json:"transfer_amount"`
 }
 
@@ -25,15 +26,38 @@ func (c *FaucetConfig) FillDefaults() {
 		c.TransferAmount = 1
 	}
 	c.OnChain.FillDefaults()
+	c.TxConfig.FillDefaults()
 }
 
 type RugConfig struct {
 	OnChain
+	TxConfig
 	ContractAddress string `json:"contract_address"`
 }
 
 func (c *RugConfig) FillDefaults() {
 	c.OnChain.FillDefaults()
+	c.TxConfig.FillDefaults()
+}
+
+type TxConfig struct {
+	GasLimit int64 `json:"gas_limit"`
+	GasPrice int64 `json:"gas_price"`
+	ChainID  int64 `json:"chain_id"`
+}
+
+func (c *TxConfig) FillDefaults() {
+	if c.GasLimit == 0 {
+		c.GasLimit = 300000
+	}
+
+	if c.GasPrice == 0 {
+		c.GasPrice = 7
+	}
+
+	if c.ChainID == 0 {
+		c.ChainID = 11822
+	}
 }
 
 type OnChain struct {

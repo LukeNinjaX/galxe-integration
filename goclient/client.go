@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"math/big"
 
+	"github.com/artela-network/galxe-integration/config"
 	"github.com/ethereum/go-ethereum/accounts/abi/bind"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -29,32 +30,37 @@ func NewClient(url string) (*Client, error) {
 	return &Client{client}, nil
 }
 
-func (c *Client) DefaultTxOpts(privateKey *ecdsa.PrivateKey, fromAddress common.Address) *bind.TransactOpts {
-	nonce, err := c.PendingNonceAt(context.Background(), fromAddress)
-	if err != nil {
-		log.Fatal(err)
-		return nil
+func (c *Client) DefaultTxOpts(privateKey *ecdsa.PrivateKey, fromAddress common.Address, conf *config.TxConfig) *bind.TransactOpts {
+	// nonce, err := c.PendingNonceAt(context.Background(), fromAddress)
+	// if err != nil {
+	// 	log.Fatal(err)
+	// 	return nil
+	// }
+
+	var err error
+	gasPrice := big.NewInt(conf.GasPrice)
+	if gasPrice.Int64() == 0 {
+		gasPrice, err = c.SuggestGasPrice(context.Background())
+		if err != nil {
+			log.Error(err)
+		}
 	}
 
-	gasPrice, err := c.SuggestGasPrice(context.Background())
-	if err != nil {
-		log.Fatal(err)
-		return nil
-	}
-
-	chainId, err := c.ChainID(context.Background())
-	if err != nil {
-		log.Fatal(err)
-		return nil
+	chainId := big.NewInt(conf.ChainID)
+	if chainId.Int64() == 0 {
+		chainId, err = c.ChainID(context.Background())
+		if err != nil {
+			log.Error(err)
+		}
 	}
 	auth, err := bind.NewKeyedTransactorWithChainID(privateKey, chainId)
 	if err != nil {
 		log.Fatal(err)
 		return nil
 	}
-	auth.Nonce = big.NewInt(int64(nonce))
-	auth.Value = big.NewInt(0)     // in wei
-	auth.GasLimit = uint64(300000) // in units
+	// auth.Nonce = big.NewInt(int64(nonce))
+	auth.Value = big.NewInt(0)            // in wei
+	auth.GasLimit = uint64(conf.GasLimit) // in units
 	auth.GasPrice = gasPrice
 	return auth
 }
@@ -81,7 +87,7 @@ func (c *Client) TransactionReceipt(ctx context.Context, hash common.Hash) (*typ
 	return c.Client.TransactionReceipt(ctx, hash)
 }
 
-func (c *Client) Transfer(privateKey *ecdsa.PrivateKey, to common.Address, amount int64, nonce uint64) (common.Hash, error) {
+func (c *Client) Transfer(privateKey *ecdsa.PrivateKey, to common.Address, amount int64, nonce uint64, conf *config.TxConfig) (common.Hash, error) {
 	// publicKey := privateKey.Public()
 	// publicKeyECDSA, ok := publicKey.(*ecdsa.PublicKey)
 	// if !ok {
@@ -94,20 +100,28 @@ func (c *Client) Transfer(privateKey *ecdsa.PrivateKey, to common.Address, amoun
 	// if err != nil {
 	// 	log.Fatal(err)
 	// }
+	var err error
 
 	value := big.NewInt(1000000000000000000 * amount) // in wei (1 eth)
-	gasLimit := uint64(21000)                         // in units
-	gasPrice, err := c.SuggestGasPrice(context.Background())
-	if err != nil {
-		return common.Hash{}, err
+	gasLimit := uint64(conf.GasLimit)                 // in units
+
+	gasPrice := big.NewInt(conf.GasPrice)
+	if gasPrice.Int64() == 0 {
+		gasPrice, err = c.SuggestGasPrice(context.Background())
+		if err != nil {
+			return common.Hash{}, err
+		}
 	}
 
 	var data []byte
 	tx := types.NewTransaction(nonce, to, value, gasLimit, gasPrice, data)
 
-	chainID, err := c.NetworkID(context.Background())
-	if err != nil {
-		return common.Hash{}, err
+	chainID := big.NewInt(conf.ChainID)
+	if chainID.Int64() == 0 {
+		chainID, err = c.NetworkID(context.Background())
+		if err != nil {
+			return common.Hash{}, err
+		}
 	}
 
 	signedTx, err := types.SignTx(tx, types.NewEIP155Signer(chainID), privateKey)

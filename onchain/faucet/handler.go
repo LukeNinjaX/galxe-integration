@@ -130,7 +130,7 @@ func (s *Faucet) handleTasks() {
 			task := elem.(biz.AddressTask)
 			// s.process(task)
 			fmt.Println("processing task...", task.ID)
-			hash, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), s.cfg.TransferAmount, s.getNonce())
+			hash, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), s.cfg.TransferAmount, s.getNonce(), &s.cfg.TxConfig)
 			if err != nil {
 				log.Error("transfer err", err)
 				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {

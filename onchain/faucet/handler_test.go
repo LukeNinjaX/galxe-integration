@@ -17,10 +17,11 @@ func TestTransfer(t *testing.T) {
 		},
 		TransferAmount: 1,
 	}
+	cfg.FillDefaults()
+
 	s, err := NewFaucet(nil, cfg)
 	require.Equal(t, nil, err)
 	defer s.client.Close()
-
 	for i := 0; i < 1000; i++ {
 		fmt.Println("sending transfer", i)
 		hash, err := s.client.Transfer(
@@ -28,6 +29,7 @@ func TestTransfer(t *testing.T) {
 			common.HexToAddress("0x22b7926DA60F97c1aAD776084174218EbBF05E28"),
 			cfg.TransferAmount,
 			s.getNonce(),
+			&cfg.TxConfig,
 		)
 		require.Equal(t, nil, err)
 		_ = hash

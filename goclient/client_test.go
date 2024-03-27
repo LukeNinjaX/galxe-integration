@@ -4,9 +4,11 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/big"
 	"testing"
 	"time"
 
+	"github.com/artela-network/galxe-integration/config"
 	store "github.com/artela-network/galxe-integration/goclient/contract"
 	"github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
@@ -24,8 +26,13 @@ func TestDeployContract(t *testing.T) {
 	privKey, pubKey, err := ReadKey("../privateKey.txt")
 	require.Equal(t, nil, err)
 
+	cfg := &config.TxConfig{}
+	cfg.FillDefaults()
+
 	fromAddress := crypto.PubkeyToAddress(*pubKey)
-	opts := c.DefaultTxOpts(privKey, fromAddress)
+	opts := c.DefaultTxOpts(privKey, fromAddress, cfg)
+	nonce, err := c.PendingNonceAt(context.Background(), fromAddress)
+	opts.Nonce = big.NewInt(int64(nonce))
 	// input := "1.0"
 
 	address, tx, instance, err := store.DeployStorage(opts, c)
@@ -59,13 +66,21 @@ func TestSend(t *testing.T) {
 
 	// deploy contract
 	fromAddress := crypto.PubkeyToAddress(*pubKey)
-	opts := c.DefaultTxOpts(privKey, fromAddress)
+	cfg := &config.TxConfig{}
+	cfg.FillDefaults()
+	opts := c.DefaultTxOpts(privKey, fromAddress, cfg)
+	nonce, err := c.PendingNonceAt(context.Background(), fromAddress)
+	require.Equal(t, nil, err)
+	opts.Nonce = big.NewInt(int64(nonce)) // we maintance the nonce ourself
+
 	_, _, instance, err := store.DeployStorage(opts, c)
 	require.Equal(t, nil, err)
 	time.Sleep(2 * time.Second)
 
 	// send a tx
-	opts = c.DefaultTxOpts(privKey, fromAddress)
+	opts = c.DefaultTxOpts(privKey, fromAddress, cfg)
+	opts.Nonce = big.NewInt(int64(nonce + 1))
+
 	storeTx, err := instance.Store(opts, "wang", store.StoragePerson{
 		Id:      222,
 		Balance: 5000,
@@ -77,6 +92,7 @@ func TestSend(t *testing.T) {
 	time.Sleep(2 * time.Second)
 
 	{
+
 		// try to query this tx
 		tx, isPending, err := c.QueryTxByHash(context.Background(), storeTx.Hash())
 		require.Equal(t, nil, err)
