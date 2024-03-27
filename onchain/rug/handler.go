@@ -215,6 +215,13 @@ func (s *Rug) connect() {
 		return
 	}
 	s.client = c
+	contractAddress := common.HexToAddress(s.cfg.ContractAddress)
+	instance, err := uniswapv2.NewUniswapV2(contractAddress, c)
+	if err != nil {
+		log.Error("connect failed")
+		return
+	}
+	s.contract = instance
 }
 
 func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
