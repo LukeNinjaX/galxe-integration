@@ -40,8 +40,8 @@ type TaskQuery struct {
 	TaskStatus     string `json:"taskStatus" xml:"taskStatus" `
 	TaskTopic      string `json:"taskTopic" xml:"taskTopic"`
 	TaskName       string `json:"taskName" xml:"taskName"`
-
-	LimitNum int `json:"limitNum" xml:"limitNum"`
+	JobBatchId     string `json:"jobBatchId" xml:"jobBatchId"`
+	LimitNum       int    `json:"limitNum" xml:"limitNum"`
 }
 
 type AddressTask struct {
@@ -334,6 +334,11 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 		queryBuilder.WriteString(" and task_name = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
 		args = append(args, query.TaskName)
+	}
+	if query.JobBatchId != "" {
+		queryBuilder.WriteString(" and job_batch_id = $")
+		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
+		args = append(args, query.JobBatchId)
 	}
 	// 去除末尾的逗号和空格
 	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
