@@ -9,6 +9,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/artela-network/galxe-integration/api/biz"
+	"github.com/artela-network/galxe-integration/api/types"
 )
 
 type UrlInput struct {
@@ -22,7 +23,7 @@ func (s *Server) getTasks(c *gin.Context) {
 	query := &biz.TaskQuery{
 		AccountAddress: accountAddress,
 		ID:             intId,
-		TaskTopic:      biz.Task_Topic_Goplus,
+		TaskTopic:      types.Task_Topic_Goplus,
 	}
 	tasks, err := biz.GetAccountTaskInfo(s.db, query)
 	if err != nil {

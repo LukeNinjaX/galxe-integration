@@ -10,13 +10,14 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artela-network/galxe-integration/api"
-	"github.com/artela-network/galxe-integration/api/biz"
-	"github.com/artela-network/galxe-integration/config"
-	"github.com/artela-network/galxe-integration/goclient"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
+
+	"github.com/artela-network/galxe-integration/api/biz"
+	"github.com/artela-network/galxe-integration/api/types"
+	"github.com/artela-network/galxe-integration/config"
+	"github.com/artela-network/galxe-integration/goclient"
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
 	log "github.com/sirupsen/logrus"
@@ -159,9 +160,9 @@ func (s *Faucet) updateTask(task biz.AddressTask, hash string, status uint64) er
 	req.Txs = &hash
 	taskStatus := *task.TaskStatus
 	if status == 0 {
-		taskStatus = string(api.TaskStatusFail)
+		taskStatus = string(types.TaskStatusFail)
 	} else {
-		taskStatus = string(api.TaskStatusSuccess)
+		taskStatus = string(types.TaskStatusSuccess)
 	}
 	req.TaskStatus = &taskStatus
 

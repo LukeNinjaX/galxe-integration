@@ -2,35 +2,39 @@ package biz
 
 import (
 	"database/sql"
+	"fmt"
 
 	"github.com/google/uuid"
 
-	"github.com/artela-network/galxe-integration/api"
+	"github.com/artela-network/galxe-integration/api/types"
 )
 
 func GetFaucetTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	return lockTasksForHandler(db, limit, api.Task_Name_GetFaucet)
+	return lockTasksForHandler(db, limit, types.Task_Name_GetFaucet)
 }
 
 func GetAspectPullTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	return lockTasksForHandler(db, limit, api.Task_Name_RugPull)
+	return lockTasksForHandler(db, limit, types.Task_Name_RugPull)
 }
 
 func GetAddLiquidityTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	return lockTasksForHandler(db, limit, api.Task_Name_AddLiquidity)
+	return lockTasksForHandler(db, limit, types.Task_Name_AddLiquidity)
 }
 
 func lockTasksForHandler(db *sql.DB, limit int, whereTaskName string) ([]AddressTask, error) {
-	SetStatus := string(api.TaskStatusProcessing)
-	whereStatus := string(api.TaskStatusPending)
+
+	SetStatus := string(types.TaskStatusProcessing)
+	whereStatus := string(types.TaskStatusPending)
 	uuidV4 := uuid.New().String()
-	updateQuery := &UpdateTaskQuery{
-		TaskStatus:  &SetStatus,
-		TaskName:    &whereTaskName,
-		JobBatchId:  &uuidV4,
-		StatusEqual: &whereStatus,
-		LimitNum:    limit}
-	err := UpdateTask(db, updateQuery)
+
+	if limit == 0 && whereTaskName == "" {
+		return nil, fmt.Errorf("limit or whereTaskName cannot be empty")
+	}
+
+	querySql := "UPDATE address_tasks SET task_status = $1, job_batch_id = $2, gmt_modify = CURRENT_TIMESTAMP WHERE id IN (SELECT id FROM address_tasks WHERE task_name=$3 and task_status = $4 LIMIT $5) "
+
+	// 执行 UPDATE 语句
+	_, err := db.Exec(querySql, SetStatus, uuidV4, whereTaskName, whereStatus, limit)
 	if err != nil {
 		return nil, err
 	}
@@ -38,6 +42,7 @@ func lockTasksForHandler(db *sql.DB, limit int, whereTaskName string) ([]Address
 	query := &TaskQuery{
 		TaskName:   whereTaskName,
 		TaskStatus: SetStatus,
+		JobBatchId: uuidV4,
 	}
 	return GetTasks(db, query)
 }

@@ -10,14 +10,15 @@ import (
 	"sync"
 	"time"
 
-	"github.com/artela-network/galxe-integration/api"
-	"github.com/artela-network/galxe-integration/api/biz"
-	"github.com/artela-network/galxe-integration/config"
-	"github.com/artela-network/galxe-integration/goclient"
-	"github.com/artela-network/galxe-integration/uniswapv2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
+
+	"github.com/artela-network/galxe-integration/api/biz"
+	"github.com/artela-network/galxe-integration/api/types"
+	"github.com/artela-network/galxe-integration/config"
+	"github.com/artela-network/galxe-integration/goclient"
+	"github.com/artela-network/galxe-integration/uniswapv2"
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
 	log "github.com/sirupsen/logrus"
@@ -169,9 +170,9 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 	req.Txs = &hash
 	taskStatus := *task.TaskStatus
 	if status == 0 {
-		taskStatus = string(api.TaskStatusFail)
+		taskStatus = string(types.TaskStatusFail)
 	} else {
-		taskStatus = string(api.TaskStatusSuccess)
+		taskStatus = string(types.TaskStatusSuccess)
 	}
 	req.TaskStatus = &taskStatus
 
@@ -217,5 +218,12 @@ func (s *Rug) connect() {
 }
 
 func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
+	// 使用 黑名单 私钥
+
+	// 构建交易
+
+	// 发送交易
+
+	// 让其被拦截
 	return common.Hash{}, nil
 }

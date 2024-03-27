@@ -14,6 +14,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
+	"github.com/artela-network/galxe-integration/api/types"
 	"github.com/artela-network/galxe-integration/config"
 )
 
@@ -30,8 +31,6 @@ type ResponseData struct {
 		Status bool `json:"status"`
 	} `json:"result"`
 }
-
-const CompiledTaskStatus = "2"
 
 func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) error {
 	compiled, err := checkAllTaskCompiled(db, input.AccountAddress)
@@ -88,7 +87,7 @@ func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) e
 
 	// update db
 	if responseData.Result.Status == true {
-		topic := Task_Topic_Sys
+		topic := types.Task_Topic_Sys
 		status := "1"
 		taskName := "Sync"
 		result := string(body)
@@ -139,12 +138,12 @@ func checkAllTaskCompiled(db *sql.DB, addr string) (bool, error) {
 	if getErr != nil {
 		return false, getErr
 	}
-	if tasks.TaskStatus != nil && *tasks.TaskStatus == "1" {
+	if tasks.TaskStatus != nil && strings.EqualFold(*tasks.TaskStatus, string(types.TaskStatusSuccess)) {
 		return false, fmt.Errorf("Sync task have been completed")
 	}
 	// check that all four tasks have been completed；
 	countSql := "select count(*) from address_tasks where account_address=$1 and task_status=$2 and task_topic=$3"
-	rows, err := db.Query(countSql, addr, CompiledTaskStatus, Task_Topic_Goplus)
+	rows, err := db.Query(countSql, addr, string(types.TaskStatusSuccess), types.Task_Topic_Goplus)
 	if err != nil {
 		return false, err
 	}

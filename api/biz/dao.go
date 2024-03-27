@@ -9,7 +9,7 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/artela-network/galxe-integration/api"
+	"github.com/artela-network/galxe-integration/api/types"
 )
 
 type UpdateTaskQuery struct {
@@ -26,7 +26,6 @@ type UpdateTaskQuery struct {
 	AccountAddress *string `json:"accountAddress" xml:"address" binding:"required"`
 	TaskName       *string `json:"taskName" xml:"taskName" `
 	StatusEqual    *string `json:"statusEqual" xml:"statusEqual"`
-	LimitNum       int     `json:"limitNum" xml:"limitNum"`
 }
 type InitTaskQuery struct {
 	AccountAddress string `json:"accountAddress" xml:"address" binding:"required"`
@@ -91,13 +90,13 @@ func InitTask(db *sql.DB, query *InitTaskQuery) error {
 	_, err := db.Exec(insertSql,
 		query.AccountAddress,
 		query.TaskId,
-		api.Task_Topic_Goplus,
-		api.Task_Topic_Sys,
-		api.Task_Name_GetFaucet,
-		api.Task_Name_AddLiquidity,
-		api.Task_Name_RugPull,
-		api.Task_Name_AspectPull,
-		api.Task_Name_Sync,
+		types.Task_Topic_Goplus,
+		types.Task_Topic_Sys,
+		types.Task_Name_GetFaucet,
+		types.Task_Name_AddLiquidity,
+		types.Task_Name_RugPull,
+		types.Task_Name_AspectPull,
+		types.Task_Name_Sync,
 	)
 	if err != nil {
 		return err
@@ -167,11 +166,6 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 	// 去除末尾的逗号和空格
 	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
 
-	querySql = querySql + " ORDER BY ID DESC "
-	if query.LimitNum > 0 {
-		querySql = querySql + fmt.Sprintf(" LIMIT %d", query.LimitNum)
-	}
-
 	// 执行 UPDATE 语句
 	_, err := db.Exec(querySql, args...)
 	return err
@@ -203,22 +197,22 @@ func GetAccountTaskInfo(db *sql.DB, query *TaskQuery) (AccountTaskInfo, error) {
 func taskDescription(taskName string) TaskInfo {
 
 	pull := TaskInfo{
-		TaskName:   api.Task_Name_RugPull,
+		TaskName:   types.Task_Name_RugPull,
 		TaskStatus: 0,
 		Title:      "Rug Pull",
 	}
 	aspect := TaskInfo{
-		TaskName:   api.Task_Name_AspectPull,
+		TaskName:   types.Task_Name_AspectPull,
 		TaskStatus: 0,
 		Title:      "Aspect Work",
 	}
 	addLiquidity := TaskInfo{
-		TaskName:   api.Task_Name_AddLiquidity,
+		TaskName:   types.Task_Name_AddLiquidity,
 		TaskStatus: 0,
 		Title:      "Add Liquidity",
 	}
 	getFaucet := TaskInfo{
-		TaskName:   api.Task_Name_GetFaucet,
+		TaskName:   types.Task_Name_GetFaucet,
 		TaskStatus: 0,
 		Title:      "Get Faucet",
 	}
