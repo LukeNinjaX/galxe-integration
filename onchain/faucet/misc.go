@@ -13,4 +13,6 @@ const (
 
 	BlockTime          = 1600 * time.Millisecond
 	GetReceiptInterval = 100 * time.Millisecond
+
+	TransferAmount int64 = 1
 )

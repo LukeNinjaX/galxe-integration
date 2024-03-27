@@ -4,16 +4,17 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
+	"fmt"
 	"math/big"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/artela-network/galxe-integration/api"
 	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/goclient"
 	"github.com/artela-network/galxe-integration/uniswapv2"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 
@@ -27,18 +28,19 @@ type Rug struct {
 	url        string
 	db         *sql.DB
 	client     *goclient.Client
-	contract   *uniswapv2.UniswapV2
 	privateKey *ecdsa.PrivateKey
 	publickKey *ecdsa.PublicKey
 	nonce      uint64
+
+	contract *uniswapv2.UniswapV2
 
 	queue *llq.Queue
 }
 
 func NewRug(db *sql.DB) (*Rug, error) {
 	url := "http://47.251.61.27:8545" // TODO from config
-	address := ""                     // contract address, TODO from config
 	keyfile := "./privateKey.txt"     // TODO
+	address := "0x"
 
 	c, err := goclient.NewClient(url)
 	if err != nil {
@@ -66,10 +68,10 @@ func NewRug(db *sql.DB) (*Rug, error) {
 		url:        url,
 		db:         db,
 		client:     c,
-		contract:   instance,
 		privateKey: privKey,
 		publickKey: pubKey,
 		nonce:      nonce,
+		contract:   instance,
 		queue:      llq.New(),
 	}, nil
 }
@@ -77,8 +79,9 @@ func NewRug(db *sql.DB) (*Rug, error) {
 func (s *Rug) getNonce() uint64 {
 	s.Lock()
 	defer s.Unlock()
+	ret := s.nonce
 	s.nonce++
-	return s.nonce
+	return ret
 }
 
 func (s *Rug) Start() {
@@ -87,6 +90,7 @@ func (s *Rug) Start() {
 }
 
 func (s *Rug) pullTasks() {
+	log.Debug("starting grab Rug task service...")
 	for {
 		if s.queue.Size() > QueueMaxSize {
 			time.Sleep(PullInterval)
@@ -100,6 +104,12 @@ func (s *Rug) pullTasks() {
 			continue
 		}
 
+		if len(tasks) == 0 {
+			time.Sleep(PullInterval)
+			continue
+		}
+
+		log.Debugf("get %d facuet stasks\n", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -111,6 +121,7 @@ func (s *Rug) getTasks(count int) ([]biz.AddressTask, error) {
 }
 
 func (s *Rug) handleTasks() {
+	log.Debug("starting handling Rug task service...")
 	for {
 		var wg sync.WaitGroup
 
@@ -120,23 +131,27 @@ func (s *Rug) handleTasks() {
 				break
 			}
 
-			wg.Add(1)
 			task := elem.(biz.AddressTask)
-			go func(task biz.AddressTask) {
-				receipt, err := s.process(task) // TODO handle timeout
-				if err != nil {
-					if strings.Contains(err.Error(), "nonce") { // TODO fix error string
-						// nonce is not match, update the nonce
-						s.updateNonce()
-					} else if strings.Contains(err.Error(), "connected") { // TODO fix error string
-						// client is disconnected
-						s.connect()
-					}
-					s.queue.Enqueue(task)
+			// s.process(task)
+			fmt.Println("processing task...", task.ID)
+			hash, err := s.rug(task)
+			if err != nil {
+				log.Error("transfer err", err)
+				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
+					// nonce is not match, update the nonce
+					s.updateNonce()
+				} else if strings.Contains(err.Error(), "connected") { // TODO fix error string
+					// client is disconnected
+					s.connect()
 				}
-				s.updateTask(task, receipt.TxHash.Hex(), receipt.Status)
+				s.queue.Enqueue(task) // TODO add retry limition
+			}
+
+			wg.Add(1)
+			go func(task biz.AddressTask, hash common.Hash) {
+				s.processReceipt(task, hash)
 				wg.Done()
-			}(task)
+			}(task, hash)
 		}
 		wg.Wait()
 		time.Sleep(PushInterval)
@@ -147,21 +162,32 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 	req := &biz.UpdateTaskQuery{}
 	req.ID = task.ID
 	req.Txs = &hash
+	taskStatus := *task.TaskStatus
 	if status == 0 {
-		req.TaskStatus = &TaskStatusFail
+		taskStatus = string(api.TaskStatusFail)
 	} else {
-		req.TaskStatus = &TaskStatusSuccess
+		taskStatus = string(api.TaskStatusSuccess)
 	}
+	req.TaskStatus = &taskStatus
 
 	return biz.UpdateTask(s.db, req)
 }
 
-func (s *Rug) process(task biz.AddressTask) (*types.Receipt, error) {
-	fromAddress := crypto.PubkeyToAddress(*s.publickKey)
-	opts := s.client.DefaultTxOpts(s.privateKey, fromAddress) // TODO optimize
-	opts.Nonce = big.NewInt(int64(s.getNonce()))
-	// tx, err := s.contract.AddLiquidity(opts)
-	return nil, nil
+func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
+	time.Sleep(BlockTime)
+	// TODO handle timeout
+	for i := 0; i < 10; i++ {
+		receipt, err := s.client.TransactionReceipt(context.Background(), hash)
+		if err != nil {
+			log.Debug("get receipt failed", hash.Hex(), err)
+			time.Sleep(GetReceiptInterval)
+			continue
+		}
+		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status)
+		return
+	}
+	log.Error("failed to get receipt after reaching the upper limit of retry times")
+	s.updateTask(task, hash.Hex(), 0)
 }
 
 func (s *Rug) updateNonce() {
@@ -183,4 +209,8 @@ func (s *Rug) connect() {
 		return
 	}
 	s.client = c
+}
+
+func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
+	return common.Hash{}, nil
 }
