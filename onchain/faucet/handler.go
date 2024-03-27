@@ -1,4 +1,4 @@
-package rug
+package faucet
 
 import (
 	"context"
@@ -12,8 +12,8 @@ import (
 
 	"github.com/artela-network/galxe-integration/api"
 	"github.com/artela-network/galxe-integration/api/biz"
+	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/goclient"
-	"github.com/artela-network/galxe-integration/uniswapv2"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
@@ -22,7 +22,7 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-type Rug struct {
+type Faucet struct {
 	sync.Mutex
 
 	url        string
@@ -32,15 +32,12 @@ type Rug struct {
 	publickKey *ecdsa.PublicKey
 	nonce      uint64
 
-	contract *uniswapv2.UniswapV2
-
 	queue *llq.Queue
 }
 
-func NewRug(db *sql.DB) (*Rug, error) {
-	url := "http://47.251.61.27:8545" // TODO from config
-	keyfile := "./privateKey.txt"     // TODO
-	address := "0x"
+func NewFaucet(db *sql.DB, cfg *config.FaucetConfig) (*Faucet, error) {
+	url := cfg.URL
+	keyfile := cfg.KeyFile
 
 	c, err := goclient.NewClient(url)
 	if err != nil {
@@ -52,31 +49,24 @@ func NewRug(db *sql.DB) (*Rug, error) {
 		return nil, err
 	}
 
-	contractAddress := common.HexToAddress(address)
-	instance, err := uniswapv2.NewUniswapV2(contractAddress, c)
-	if err != nil {
-		return nil, err
-	}
-
 	accountAddress := crypto.PubkeyToAddress(*pubKey)
 	nonce, err := goclient.Client.NonceAt(*c, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
 	if err != nil {
 		return nil, err
 	}
 
-	return &Rug{
+	return &Faucet{
 		url:        url,
 		db:         db,
 		client:     c,
 		privateKey: privKey,
 		publickKey: pubKey,
 		nonce:      nonce,
-		contract:   instance,
 		queue:      llq.New(),
 	}, nil
 }
 
-func (s *Rug) getNonce() uint64 {
+func (s *Faucet) getNonce() uint64 {
 	s.Lock()
 	defer s.Unlock()
 	ret := s.nonce
@@ -84,13 +74,13 @@ func (s *Rug) getNonce() uint64 {
 	return ret
 }
 
-func (s *Rug) Start() {
+func (s *Faucet) Start() {
 	go s.pullTasks()
 	go s.handleTasks()
 }
 
-func (s *Rug) pullTasks() {
-	log.Debug("starting grab Rug task service...")
+func (s *Faucet) pullTasks() {
+	log.Debug("starting grab faucet task service...")
 	for {
 		if s.queue.Size() > QueueMaxSize {
 			time.Sleep(PullInterval)
@@ -116,12 +106,12 @@ func (s *Rug) pullTasks() {
 	}
 }
 
-func (s *Rug) getTasks(count int) ([]biz.AddressTask, error) {
-	return biz.GetAspectPullTask(s.db, count)
+func (s *Faucet) getTasks(count int) ([]biz.AddressTask, error) {
+	return biz.GetFaucetTask(s.db, count)
 }
 
-func (s *Rug) handleTasks() {
-	log.Debug("starting handling Rug task service...")
+func (s *Faucet) handleTasks() {
+	log.Debug("starting handling faucet task service...")
 	for {
 		var wg sync.WaitGroup
 
@@ -134,7 +124,7 @@ func (s *Rug) handleTasks() {
 			task := elem.(biz.AddressTask)
 			// s.process(task)
 			fmt.Println("processing task...", task.ID)
-			hash, err := s.rug(task)
+			hash, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), TransferAmount, s.getNonce())
 			if err != nil {
 				log.Error("transfer err", err)
 				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
@@ -158,7 +148,7 @@ func (s *Rug) handleTasks() {
 	}
 }
 
-func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error {
+func (s *Faucet) updateTask(task biz.AddressTask, hash string, status uint64) error {
 	req := &biz.UpdateTaskQuery{}
 	req.ID = task.ID
 	req.Txs = &hash
@@ -173,7 +163,7 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 	return biz.UpdateTask(s.db, req)
 }
 
-func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
+func (s *Faucet) processReceipt(task biz.AddressTask, hash common.Hash) {
 	time.Sleep(BlockTime)
 	// TODO handle timeout
 	for i := 0; i < 10; i++ {
@@ -190,7 +180,7 @@ func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
 	s.updateTask(task, hash.Hex(), 0)
 }
 
-func (s *Rug) updateNonce() {
+func (s *Faucet) updateNonce() {
 	accountAddress := crypto.PubkeyToAddress(*s.publickKey)
 	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
 	if err != nil {
@@ -202,15 +192,11 @@ func (s *Rug) updateNonce() {
 	s.nonce = nonce
 }
 
-func (s *Rug) connect() {
+func (s *Faucet) connect() {
 	c, err := goclient.NewClient(s.url)
 	if err != nil {
 		log.Error("connect failed")
 		return
 	}
 	s.client = c
-}
-
-func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
-	return common.Hash{}, nil
 }

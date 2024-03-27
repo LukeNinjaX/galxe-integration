@@ -65,12 +65,12 @@ func main() {
 	apiServer := api.NewServer(ctx, conf, driver, conn, chainFetcher, indexers)
 	apiServer.Start()
 
-	// rugTask, err := rug.NewRug(conn)
+	// rugTask, err := rug.NewRug(conn, conf.Rug)
 	// if err != nil {
 	// 	log.Fatalf("failed to start rug service: %v", err)
 	// }
 	// rugTask.Start()
-	faucet, err := faucet.NewFaucet(conn)
+	faucet, err := faucet.NewFaucet(conn, conf.Faucet)
 	if err != nil {
 		log.Fatalf("failed to start rug service: %v", err)
 	}

@@ -11,7 +11,21 @@ type Config struct {
 	Fetcher   *FetcherConfig    `json:"fetcher"`
 	DB        *DBConfig         `json:"db"`
 	GoPlus    *GoPlusConfig     `json:"biz_goplus"`
+	Faucet    *FaucetConfig     `json:"faucet"`
+	Rug       *RugConfig        `json:"rug"`
 }
+
+type FaucetConfig struct {
+	URL     string `json:"url"`
+	KeyFile string `json:"keyfile"`
+}
+
+type RugConfig struct {
+	URL             string `json:"url"`
+	KeyFile         string `json:"keyfile"`
+	ContractAddress string `json:"contract_address"`
+}
+
 type GoPlusConfig struct {
 	ChannelCode string `json:"channelCode"`
 	ManageId    string `json:"manageId"`
