@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
-	"errors"
 	"fmt"
 	"math/big"
 	"strings"
@@ -15,7 +14,6 @@ import (
 	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/goclient"
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/ethereum/go-ethereum/rpc"
 
@@ -81,6 +79,7 @@ func (s *Faucet) Start() {
 }
 
 func (s *Faucet) pullTasks() {
+	log.Debug("starting grab faucet task service...")
 	for {
 		if s.queue.Size() > QueueMaxSize {
 			time.Sleep(PullInterval)
@@ -94,6 +93,12 @@ func (s *Faucet) pullTasks() {
 			continue
 		}
 
+		if len(tasks) == 0 {
+			time.Sleep(PullInterval)
+			continue
+		}
+
+		log.Debugf("get %d facuet stasks\n", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -105,6 +110,7 @@ func (s *Faucet) getTasks(count int) ([]biz.AddressTask, error) {
 }
 
 func (s *Faucet) handleTasks() {
+	log.Debug("starting handling faucet task service...")
 	for {
 		var wg sync.WaitGroup
 
@@ -114,23 +120,27 @@ func (s *Faucet) handleTasks() {
 				break
 			}
 
-			wg.Add(1)
 			task := elem.(biz.AddressTask)
-			go func(task biz.AddressTask) {
-				receipt, err := s.process(task)
-				if err != nil {
-					if strings.Contains(err.Error(), "nonce") { // TODO fix error string
-						// nonce is not match, update the nonce
-						s.updateNonce()
-					} else if strings.Contains(err.Error(), "connected") { // TODO fix error string
-						// client is disconnected
-						s.connect()
-					}
-					s.queue.Enqueue(task)
+			// s.process(task)
+			fmt.Println("processing task...", task.ID)
+			hash, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), 1, s.getNonce())
+			if err != nil {
+				log.Error("transfer err", err)
+				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
+					// nonce is not match, update the nonce
+					s.updateNonce()
+				} else if strings.Contains(err.Error(), "connected") { // TODO fix error string
+					// client is disconnected
+					s.connect()
 				}
-				s.updateTask(task, receipt.TxHash.Hex(), receipt.Status)
+				s.queue.Enqueue(task) // TODO add retry limition
+			}
+
+			wg.Add(1)
+			go func(task biz.AddressTask, hash common.Hash) {
+				s.processReceipt(task, hash)
 				wg.Done()
-			}(task)
+			}(task, hash)
 		}
 		wg.Wait()
 		time.Sleep(PushInterval)
@@ -152,12 +162,7 @@ func (s *Faucet) updateTask(task biz.AddressTask, hash string, status uint64) er
 	return biz.UpdateTask(s.db, req)
 }
 
-func (s *Faucet) process(task biz.AddressTask) (*types.Receipt, error) {
-	fmt.Println("processing task...", task.ID)
-	hash, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), 1, s.getNonce())
-	if err != nil {
-		return nil, err
-	}
+func (s *Faucet) processReceipt(task biz.AddressTask, hash common.Hash) {
 	time.Sleep(BlockTime)
 	// TODO handle timeout
 	for i := 0; i < 10; i++ {
@@ -167,9 +172,11 @@ func (s *Faucet) process(task biz.AddressTask) (*types.Receipt, error) {
 			time.Sleep(GetReceiptInterval)
 			continue
 		}
-		return receipt, nil
+		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status)
+		return
 	}
-	return nil, errors.New("failed to get receipt, retry timeout")
+	log.Error("failed to get receipt after reaching the upper limit of retry times")
+	s.updateTask(task, hash.Hex(), 0)
 }
 
 func (s *Faucet) updateNonce() {
