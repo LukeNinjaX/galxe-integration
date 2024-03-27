@@ -221,6 +221,7 @@ func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
 	// 使用 黑名单 私钥
 
 	// 构建交易
+	s.contract.SwapETHForExactTokens()
 
 	// 发送交易
 

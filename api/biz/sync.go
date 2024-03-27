@@ -67,7 +67,7 @@ func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) e
 		return postErr
 	}
 	pstReq.Header.Add("sign", sign)
-	log.Info("goplus sync: url ", config.SecwarexUrl, " body ", string(bytesData), "sign ", sign, "sign plaintext", s)
+	log.Info("goplus sync url| ", config.SecwarexUrl, "| body|", string(bytesData), "| sign: |", sign, "| sign plaintext: |", s)
 
 	resp, doErr := client.Do(pstReq)
 	if doErr != nil {
@@ -88,7 +88,7 @@ func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) e
 	// update db
 	if responseData.Result.Status == true {
 		topic := types.Task_Topic_Sys
-		status := "1"
+		status := string(types.TaskStatusSuccess)
 		taskName := "Sync"
 		result := string(body)
 		updateTaskQuery := &UpdateTaskQuery{
@@ -110,19 +110,24 @@ func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) e
 
 func createSign(body *PostBody, config *config.GoPlusConfig) (string, string, error) {
 
-	marshal, err := json.Marshal(body)
-	if err != nil {
-		return "", "", err
-	}
 	var queryBuilder strings.Builder
-	queryBuilder.WriteString("body")
-	queryBuilder.WriteString(string(marshal))
+	queryBuilder.WriteString("channelCode")
+	queryBuilder.WriteString(body.ChannelCode)
+
+	queryBuilder.WriteString("channelTaskId")
+	queryBuilder.WriteString(body.ChannelTaskId)
+
+	queryBuilder.WriteString("completeTime")
+	queryBuilder.WriteString(body.CompleteTime)
 
 	queryBuilder.WriteString("manageKey")
 	queryBuilder.WriteString(config.ManageKey)
 
-	queryBuilder.WriteString("time")
+	queryBuilder.WriteString("timestamp")
 	queryBuilder.WriteString(strconv.FormatInt(time.Now().UnixMilli(), 10))
+
+	queryBuilder.WriteString("userAddress")
+	queryBuilder.WriteString(body.UserAddress)
 
 	query := queryBuilder.String()
 	data := []byte(queryBuilder.String())
