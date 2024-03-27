@@ -5,11 +5,13 @@ import (
 	"crypto/ecdsa"
 	"database/sql"
 	"errors"
+	"fmt"
 	"math/big"
 	"strings"
 	"sync"
 	"time"
 
+	"github.com/artela-network/galxe-integration/api"
 	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/goclient"
 	"github.com/ethereum/go-ethereum/common"
@@ -139,16 +141,19 @@ func (s *Faucet) updateTask(task biz.AddressTask, hash string, status uint64) er
 	req := &biz.UpdateTaskQuery{}
 	req.ID = task.ID
 	req.Txs = &hash
+	taskStatus := *task.TaskStatus
 	if status == 0 {
-		req.TaskStatus = &TaskStatusFail
+		taskStatus = string(api.TaskStatusFail)
 	} else {
-		req.TaskStatus = &TaskStatusSuccess
+		taskStatus = string(api.TaskStatusSuccess)
 	}
+	req.TaskStatus = &taskStatus
 
 	return biz.UpdateTask(s.db, req)
 }
 
 func (s *Faucet) process(task biz.AddressTask) (*types.Receipt, error) {
+	fmt.Println("processing task...", task.ID)
 	hash, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), 1, s.getNonce())
 	if err != nil {
 		return nil, err

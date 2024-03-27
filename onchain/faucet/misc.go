@@ -14,8 +14,3 @@ const (
 	BlockTime          = 1600 * time.Millisecond
 	GetReceiptInterval = 100 * time.Millisecond
 )
-
-var (
-	TaskStatusFail    = "3"
-	TaskStatusSuccess = "2"
-)
