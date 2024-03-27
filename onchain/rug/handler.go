@@ -34,6 +34,7 @@ type Rug struct {
 	nonce      uint64
 
 	contract *uniswapv2.UniswapV2
+	cfg      *config.RugConfig
 
 	queue *llq.Queue
 }
@@ -42,6 +43,8 @@ func NewRug(db *sql.DB, cfg *config.RugConfig) (*Rug, error) {
 	url := cfg.URL
 	keyfile := cfg.KeyFile
 	address := cfg.ContractAddress
+
+	cfg.FillDefaults()
 
 	c, err := goclient.NewClient(url)
 	if err != nil {
@@ -74,6 +77,7 @@ func NewRug(db *sql.DB, cfg *config.RugConfig) (*Rug, error) {
 		nonce:      nonce,
 		contract:   instance,
 		queue:      llq.New(),
+		cfg:        cfg,
 	}, nil
 }
 
@@ -93,20 +97,20 @@ func (s *Rug) Start() {
 func (s *Rug) pullTasks() {
 	log.Debug("starting grab Rug task service...")
 	for {
-		if s.queue.Size() > QueueMaxSize {
-			time.Sleep(PullInterval)
+		if s.queue.Size() > s.cfg.QueueMaxSize {
+			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
-		tasks, err := s.getTasks(PullBatchCount)
+		tasks, err := s.getTasks(s.cfg.PullBatchCount)
 		if err != nil {
 			log.Error("getTasks failed", err)
-			time.Sleep(PullInterval)
+			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
 		if len(tasks) == 0 {
-			time.Sleep(PullInterval)
+			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
@@ -126,7 +130,7 @@ func (s *Rug) handleTasks() {
 	for {
 		var wg sync.WaitGroup
 
-		for i := 0; i < PushBatchCount; i++ {
+		for i := 0; i < s.cfg.PushBatchCount; i++ {
 			elem, ok := s.queue.Dequeue()
 			if !ok {
 				break
@@ -155,7 +159,7 @@ func (s *Rug) handleTasks() {
 			}(task, hash)
 		}
 		wg.Wait()
-		time.Sleep(PushInterval)
+		time.Sleep(time.Duration(s.cfg.PushInterval) * time.Millisecond)
 	}
 }
 
@@ -175,13 +179,13 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 }
 
 func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
-	time.Sleep(BlockTime)
+	time.Sleep(time.Duration(s.cfg.BlockTime) * time.Millisecond)
 	// TODO handle timeout
 	for i := 0; i < 10; i++ {
 		receipt, err := s.client.TransactionReceipt(context.Background(), hash)
 		if err != nil {
 			log.Debug("get receipt failed", hash.Hex(), err)
-			time.Sleep(GetReceiptInterval)
+			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
 			continue
 		}
 		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status)

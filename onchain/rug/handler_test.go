@@ -1,6 +1,7 @@
 package rug
 
 import (
+	"fmt"
 	"testing"
 
 	"github.com/artela-network/galxe-integration/config"
@@ -8,8 +9,18 @@ import (
 )
 
 func TestNewRug(t *testing.T) {
-	rug, err := NewRug(nil, &config.RugConfig{URL: "http://47.251.61.27:8545", KeyFile: "../privateKey.txt", ContractAddress: "0x"})
+	cfg := &config.RugConfig{
+		OnChain: config.OnChain{
+			URL:     "http://47.251.58.164:8545",
+			KeyFile: "../../privateKey.txt",
+		},
+		ContractAddress: "0x",
+	}
+	s, err := NewRug(nil, cfg)
 	require.Equal(t, nil, err)
+	defer s.client.Close()
 
-	_ = rug
+	for i := 0; i < 1000; i++ {
+		fmt.Println("sending swap", i)
+	}
 }

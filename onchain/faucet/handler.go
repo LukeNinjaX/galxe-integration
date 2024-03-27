@@ -32,12 +32,16 @@ type Faucet struct {
 	publickKey *ecdsa.PublicKey
 	nonce      uint64
 
+	cfg *config.FaucetConfig
+
 	queue *llq.Queue
 }
 
 func NewFaucet(db *sql.DB, cfg *config.FaucetConfig) (*Faucet, error) {
 	url := cfg.URL
 	keyfile := cfg.KeyFile
+
+	cfg.FillDefaults()
 
 	c, err := goclient.NewClient(url)
 	if err != nil {
@@ -63,6 +67,7 @@ func NewFaucet(db *sql.DB, cfg *config.FaucetConfig) (*Faucet, error) {
 		publickKey: pubKey,
 		nonce:      nonce,
 		queue:      llq.New(),
+		cfg:        cfg,
 	}, nil
 }
 
@@ -82,20 +87,20 @@ func (s *Faucet) Start() {
 func (s *Faucet) pullTasks() {
 	log.Debug("starting grab faucet task service...")
 	for {
-		if s.queue.Size() > QueueMaxSize {
-			time.Sleep(PullInterval)
+		if s.queue.Size() > s.cfg.QueueMaxSize {
+			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
-		tasks, err := s.getTasks(PullBatchCount)
+		tasks, err := s.getTasks(s.cfg.PullBatchCount)
 		if err != nil {
 			log.Error("getTasks failed", err)
-			time.Sleep(PullInterval)
+			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
 		if len(tasks) == 0 {
-			time.Sleep(PullInterval)
+			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
@@ -115,7 +120,7 @@ func (s *Faucet) handleTasks() {
 	for {
 		var wg sync.WaitGroup
 
-		for i := 0; i < PushBatchCount; i++ {
+		for i := 0; i < s.cfg.PushBatchCount; i++ {
 			elem, ok := s.queue.Dequeue()
 			if !ok {
 				break
@@ -124,7 +129,7 @@ func (s *Faucet) handleTasks() {
 			task := elem.(biz.AddressTask)
 			// s.process(task)
 			fmt.Println("processing task...", task.ID)
-			hash, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), TransferAmount, s.getNonce())
+			hash, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), s.cfg.TransferAmount, s.getNonce())
 			if err != nil {
 				log.Error("transfer err", err)
 				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
@@ -144,7 +149,7 @@ func (s *Faucet) handleTasks() {
 			}(task, hash)
 		}
 		wg.Wait()
-		time.Sleep(PushInterval)
+		time.Sleep(time.Duration(s.cfg.PushInterval) * time.Millisecond)
 	}
 }
 
@@ -164,13 +169,13 @@ func (s *Faucet) updateTask(task biz.AddressTask, hash string, status uint64) er
 }
 
 func (s *Faucet) processReceipt(task biz.AddressTask, hash common.Hash) {
-	time.Sleep(BlockTime)
+	time.Sleep(time.Duration(s.cfg.BlockTime) * time.Millisecond)
 	// TODO handle timeout
 	for i := 0; i < 10; i++ {
 		receipt, err := s.client.TransactionReceipt(context.Background(), hash)
 		if err != nil {
 			log.Debug("get receipt failed", hash.Hex(), err)
-			time.Sleep(GetReceiptInterval)
+			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
 			continue
 		}
 		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status)

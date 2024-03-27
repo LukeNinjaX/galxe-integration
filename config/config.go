@@ -16,14 +16,66 @@ type Config struct {
 }
 
 type FaucetConfig struct {
-	URL     string `json:"url"`
-	KeyFile string `json:"keyfile"`
+	OnChain
+	TransferAmount int64 `json:"transfer_amount"`
+}
+
+func (c *FaucetConfig) FillDefaults() {
+	if c.TransferAmount <= 0 {
+		c.TransferAmount = 1
+	}
+	c.OnChain.FillDefaults()
 }
 
 type RugConfig struct {
-	URL             string `json:"url"`
-	KeyFile         string `json:"keyfile"`
+	OnChain
 	ContractAddress string `json:"contract_address"`
+}
+
+func (c *RugConfig) FillDefaults() {
+	c.OnChain.FillDefaults()
+}
+
+type OnChain struct {
+	URL                string `json:"url"`
+	KeyFile            string `json:"keyfile"`
+	PullInterval       int    `json:"pull_interval"`
+	PullBatchCount     int    `json:"pull_batch_count"`
+	PushInterval       int    `json:"push_interval"`
+	PushBatchCount     int    `json:"push_batch_count"`
+	QueueMaxSize       int    `json:"queue_max_size"`
+	BlockTime          int    `json:"block_time"`
+	GetReceiptInterval int    `json:"get_receipt_interval"`
+}
+
+func (c *OnChain) FillDefaults() {
+	if c.PullInterval <= 0 {
+		c.PullInterval = 1000
+	}
+
+	if c.PullBatchCount <= 0 {
+		c.PullBatchCount = 20
+	}
+
+	if c.PushInterval <= 0 {
+		c.PushInterval = 1000
+	}
+
+	if c.PushBatchCount <= 0 {
+		c.PushBatchCount = 50
+	}
+
+	if c.QueueMaxSize <= 0 {
+		c.QueueMaxSize = 200
+	}
+
+	if c.BlockTime <= 0 {
+		c.BlockTime = 600
+	}
+
+	if c.GetReceiptInterval <= 0 {
+		c.GetReceiptInterval = 100
+	}
 }
 
 type GoPlusConfig struct {
