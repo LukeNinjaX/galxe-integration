@@ -8,11 +8,8 @@ import (
 	"time"
 
 	log "github.com/sirupsen/logrus"
-)
 
-const (
-	Task_Topic_Goplus = "goplus"
-	Task_Topic_Sys    = "sys"
+	"github.com/artela-network/galxe-integration/api"
 )
 
 type UpdateTaskQuery struct {
@@ -22,7 +19,7 @@ type UpdateTaskQuery struct {
 	Memo       *string `json:"memo" xml:"memo" `
 	Txs        *string `json:"txs" xml:"txs" `
 	TaskId     *string `json:"taskId" xml:"taskId"`
-	TxInput    *string `json:"txInput" xml:"txInput"`
+	JobBatchId *string `json:"jobBatchId" xml:"jobBatchId"`
 
 	// where condition
 	ID             int64   `json:"id" xml:"id" binding:"required"`
@@ -59,7 +56,7 @@ type AddressTask struct {
 	Txs        *string `db:"txs"`
 	TaskId     *string `db:"task_id"`
 	TaskTopic  *string `db:"task_topic"`
-	TxInput    *string `db:"tx_input"`
+	JobBatchId *string `db:"job_batch_id"`
 }
 type TaskInfo struct {
 	ID         int64  `json:"id,omitempty"`
@@ -85,13 +82,23 @@ func InitTask(db *sql.DB, query *InitTaskQuery) error {
 	}
 	// insert db
 	insertSql := "INSERT INTO address_tasks (account_address, task_name,task_status,task_id,task_topic) VALUES " +
-		"($1, 'AddLiquidity','0',$2,$3)," +
-		"($1, 'AspectPull', '0',$2,$3)," +
-		"($1, 'RugPull', '0',$2,$3)," +
-		"($1, 'GetFaucet', '0',$2,$3)," +
-		"($1, 'Sync', '0',$2,$4);"
+		"($1, $5, '0',$2,$3)," +
+		"($1, $6, '0',$2,$3)," +
+		"($1, $7, '0',$2,$3)," +
+		"($1, $8, '0',$2,$3)," +
+		"($1, $9, '0',$2,$4);"
 
-	_, err := db.Exec(insertSql, query.AccountAddress, query.TaskId, Task_Topic_Goplus, Task_Topic_Sys)
+	_, err := db.Exec(insertSql,
+		query.AccountAddress,
+		query.TaskId,
+		api.Task_Topic_Goplus,
+		api.Task_Topic_Sys,
+		api.Task_Name_GetFaucet,
+		api.Task_Name_AddLiquidity,
+		api.Task_Name_RugPull,
+		api.Task_Name_AspectPull,
+		api.Task_Name_Sync,
+	)
 	if err != nil {
 		return err
 	}
@@ -129,10 +136,10 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
 		args = append(args, query.TaskId)
 	}
-	if query.TxInput != nil {
-		queryBuilder.WriteString("tx_input = $")
+	if query.JobBatchId != nil {
+		queryBuilder.WriteString("job_batch_id = $")
 		queryBuilder.WriteString(fmt.Sprintf("%d, ", len(args)+1))
-		args = append(args, query.TxInput)
+		args = append(args, query.JobBatchId)
 	}
 	queryBuilder.WriteString(" gmt_modify = CURRENT_TIMESTAMP ")
 
@@ -196,22 +203,22 @@ func GetAccountTaskInfo(db *sql.DB, query *TaskQuery) (AccountTaskInfo, error) {
 func taskDescription(taskName string) TaskInfo {
 
 	pull := TaskInfo{
-		TaskName:   "RugPull",
+		TaskName:   api.Task_Name_RugPull,
 		TaskStatus: 0,
 		Title:      "Rug Pull",
 	}
 	aspect := TaskInfo{
-		TaskName:   "AspectPull",
+		TaskName:   api.Task_Name_AspectPull,
 		TaskStatus: 0,
 		Title:      "Aspect Work",
 	}
 	addLiquidity := TaskInfo{
-		TaskName:   "AddLiquidity",
+		TaskName:   api.Task_Name_AddLiquidity,
 		TaskStatus: 0,
 		Title:      "Add Liquidity",
 	}
 	getFaucet := TaskInfo{
-		TaskName:   "GetFaucet",
+		TaskName:   api.Task_Name_GetFaucet,
 		TaskStatus: 0,
 		Title:      "Get Faucet",
 	}
@@ -294,7 +301,7 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 	var queryBuilder strings.Builder
 	var args []interface{}
 
-	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,task_id,task_topic,tx_input FROM address_tasks ")
+	queryBuilder.WriteString("SELECT id,gmt_create,gmt_modify,account_address,task_name,task_status,memo,txs,task_id,task_topic,job_batch_id FROM address_tasks ")
 
 	queryBuilder.WriteString(" WHERE 1=1 ")
 	if query.ID > 0 {
@@ -362,7 +369,7 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 			&addressTask.Txs,
 			&addressTask.TaskId,
 			&addressTask.TaskTopic,
-			&addressTask.TxInput,
+			&addressTask.JobBatchId,
 		)
 		if err != nil {
 			log.Fatal(err)

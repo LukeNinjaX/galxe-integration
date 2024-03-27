@@ -1,28 +1,33 @@
 package biz
 
-import "database/sql"
+import (
+	"database/sql"
+
+	"github.com/google/uuid"
+
+	"github.com/artela-network/galxe-integration/api"
+)
 
 func GetFaucetTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	whereTaskName := "GetFaucet"
-	return lockTasksForHandler(db, limit, whereTaskName)
+	return lockTasksForHandler(db, limit, api.Task_Name_GetFaucet)
 }
 
 func GetAspectPullTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	whereTaskName := "RugPull"
-	return lockTasksForHandler(db, limit, whereTaskName)
+	return lockTasksForHandler(db, limit, api.Task_Name_RugPull)
 }
 
 func GetAddLiquidityTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	whereTaskName := "AddLiquidity"
-	return lockTasksForHandler(db, limit, whereTaskName)
+	return lockTasksForHandler(db, limit, api.Task_Name_AddLiquidity)
 }
 
 func lockTasksForHandler(db *sql.DB, limit int, whereTaskName string) ([]AddressTask, error) {
-	SetStatus := "2"
-	whereStatus := "1"
+	SetStatus := string(api.TaskStatusProcessing)
+	whereStatus := string(api.TaskStatusPending)
+	uuidV4 := uuid.New().String()
 	updateQuery := &UpdateTaskQuery{
 		TaskStatus:  &SetStatus,
 		TaskName:    &whereTaskName,
+		JobBatchId:  &uuidV4,
 		StatusEqual: &whereStatus,
 		LimitNum:    limit}
 	err := UpdateTask(db, updateQuery)
