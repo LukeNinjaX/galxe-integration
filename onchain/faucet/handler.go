@@ -25,6 +25,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const UINT = 1000000000000000000
+
 type Faucet struct {
 	sync.Mutex
 
@@ -95,7 +97,7 @@ func (s *Faucet) Start() {
 }
 
 func (s *Faucet) pullTasks() {
-	log.Debug("starting grab faucet task service...")
+	log.Debug("faucet module: starting grab faucet task service...")
 	for {
 		if s.queue.Size() > s.cfg.QueueMaxSize {
 			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
@@ -104,7 +106,7 @@ func (s *Faucet) pullTasks() {
 
 		tasks, err := s.getTasks(s.cfg.PullBatchCount)
 		if err != nil {
-			log.Error("getTasks failed", err)
+			log.Error("faucet module: getTasks failed", err)
 			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
@@ -114,7 +116,7 @@ func (s *Faucet) pullTasks() {
 			continue
 		}
 
-		log.Debugf("get %d facuet stasks\n", len(tasks))
+		log.Debugf("faucet module: get %d facuet stasks\n", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -126,18 +128,23 @@ func (s *Faucet) getTasks(count int) ([]biz.AddressTask, error) {
 }
 
 func (s *Faucet) handleTasks() {
-	log.Debug("starting handling faucet task service...")
+	log.Debug("faucet module: starting handling faucet task service...")
 	for {
 		var wg sync.WaitGroup
 
 		for i := 0; i < s.cfg.PushBatchCount; i++ {
 			elem, ok := s.queue.Dequeue()
 			if !ok {
-				break
+				continue
+			}
+
+			task, ok := elem.(biz.AddressTask)
+			if !ok {
+				log.Error("faucet module: element from queue is not a task")
 			}
 
 			var handleError = func(task biz.AddressTask, err error) {
-				log.Error("transfer err", err)
+				log.Error("faucet module: transfer err", err)
 				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
 					// nonce is not match, update the nonce
 					s.updateNonce()
@@ -148,21 +155,29 @@ func (s *Faucet) handleTasks() {
 				s.queue.Enqueue(task)
 			}
 
-			task := elem.(biz.AddressTask)
+			if task.AccountAddress == nil {
+				log.Error("faucet module: task AccountAddress is nil", task.ID)
+				continue
+			}
+
+			fromAddress := crypto.PubkeyToAddress(*s.publickKey)
+
 			// s.process(task)
-			log.Debug("processing faucet...", task.ID, *task.AccountAddress)
-			hashTransfer, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), s.cfg.TransferAmount, s.getNonce(), &s.cfg.TxConfig)
+			artAmount := s.cfg.TransferAmount
+			log.Debugf("faucet module: transfering art from %s to %s for %d, amount %d\n", fromAddress.Hex(), *task.AccountAddress, task.ID, artAmount)
+			hashTransfer, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), artAmount, s.getNonce(), &s.cfg.TxConfig)
 			if err != nil {
 				handleError(task, err)
 				continue
 			}
 
-			fromAddress := crypto.PubkeyToAddress(*s.publickKey)
 			nonce := s.getNonce()
 			opts := s.client.DefaultTxOpts(s.privateKey, fromAddress, &s.cfg.TxConfig)
 			opts.Nonce = big.NewInt(int64(nonce)) // we maintance the nonce ourself
 			toAddress := common.HexToAddress(*task.AccountAddress)
-			txRug, err := s.rug.Transfer(opts, toAddress, big.NewInt(s.cfg.RugAmount))
+			rugAmount := big.NewInt(1).Mul(big.NewInt(s.cfg.RugAmount), big.NewInt(UINT))
+			log.Debugf("faucet module: transfering rug from %s to %s for %d, amount %d\n", fromAddress.Hex(), toAddress.Hex(), task.ID, rugAmount)
+			txRug, err := s.rug.Transfer(opts, toAddress, rugAmount)
 			if err != nil {
 				handleError(task, err)
 				continue
@@ -191,11 +206,12 @@ func (s *Faucet) updateTask(task biz.AddressTask, memo string, status uint64) er
 	}
 	req.TaskStatus = &taskStatus
 
-	log.Debugf("update faucet task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
+	log.Debugf("faucet module: updating task, %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
 func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug common.Hash) {
+	log.Debugf("faucet module: getting receipt for task, %d, trasfer hash %s, rug hash %s\n", task.ID, hashTransfer.Hex(), hashRug.Hex())
 	time.Sleep(time.Duration(s.cfg.BlockTime) * time.Millisecond)
 	// TODO handle timeout
 	var transferReceipt, rugReceipt *coretypes.Receipt
@@ -204,7 +220,7 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 		if transferReceipt == nil {
 			transferReceipt, err = s.client.TransactionReceipt(context.Background(), hashTransfer)
 			if err != nil {
-				log.Debug("get receipt failed", hashTransfer.Hex(), err)
+				log.Debug("faucet module: get receipt failed", hashTransfer.Hex(), err)
 				time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
 				continue
 			}
@@ -213,7 +229,7 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 		if rugReceipt == nil {
 			rugReceipt, err = s.client.TransactionReceipt(context.Background(), hashRug)
 			if err != nil {
-				log.Debug("get receipt failed", hashTransfer.Hex(), err)
+				log.Debug("faucet module: get receipt failed", hashTransfer.Hex(), err)
 				time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
 				continue
 			}
@@ -229,16 +245,17 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 			return
 		}
 	}
-	log.Error("failed to get receipt after reaching the upper limit of retry times")
+	log.Error("faucet module: failed to get receipt after reaching the upper limit of retry times")
 	memo := fmt.Sprintf("%s,%s", transferReceipt.TxHash.Hex(), rugReceipt.TxHash.Hex())
 	s.updateTask(task, memo, 0)
 }
 
 func (s *Faucet) updateNonce() {
+	log.Debug("faucet module: updating nonce")
 	accountAddress := crypto.PubkeyToAddress(*s.publickKey)
 	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
 	if err != nil {
-		log.Error("get nonce failed")
+		log.Error("faucet module: get nonce failed")
 		// try to reconnect the client
 		s.connect()
 		time.Sleep(100 * time.Millisecond)
@@ -247,9 +264,10 @@ func (s *Faucet) updateNonce() {
 }
 
 func (s *Faucet) connect() {
+	log.Debug("faucet module: connecting client")
 	c, err := goclient.NewClient(s.url)
 	if err != nil {
-		log.Error("connect failed")
+		log.Error("faucet module: connect failed")
 		return
 	}
 	s.client = c
@@ -257,7 +275,7 @@ func (s *Faucet) connect() {
 
 	instance, err := rug.NewRug(common.HexToAddress(s.cfg.RugAddress), c)
 	if err != nil {
-		log.Error("load rug contract failed", err)
+		log.Error("faucet module: load rug contract failed", err)
 	}
 	s.rug = instance
 }

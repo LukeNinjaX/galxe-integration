@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/ecdsa"
 	"database/sql"
-	"fmt"
 	"math/big"
 	"strings"
 	"sync"
@@ -22,6 +21,11 @@ import (
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
 	log "github.com/sirupsen/logrus"
+)
+
+const (
+	UINT      = 1000000000000000000
+	RugAmount = 100000000
 )
 
 type Rug struct {
@@ -49,23 +53,27 @@ func NewRug(db *sql.DB, cfg *config.RugConfig) (*Rug, error) {
 
 	c, err := goclient.NewClient(url)
 	if err != nil {
+		log.Error("rug module: connect to rpc failed", err)
 		return nil, err
 	}
 
 	privKey, pubKey, err := goclient.ReadKey(keyfile)
 	if err != nil {
+		log.Error("rug module: read key failed", err)
 		return nil, err
 	}
 
 	contractAddress := common.HexToAddress(address)
 	instance, err := uniswapv2.NewUniswapV2(contractAddress, c)
 	if err != nil {
+		log.Error("rug module: load uniswapV2 failed", err)
 		return nil, err
 	}
 
 	accountAddress := crypto.PubkeyToAddress(*pubKey)
 	nonce, err := goclient.Client.NonceAt(*c, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
 	if err != nil {
+		log.Error("rug module: update nonce failed", err)
 		return nil, err
 	}
 
@@ -96,7 +104,7 @@ func (s *Rug) Start() {
 }
 
 func (s *Rug) pullTasks() {
-	log.Debug("starting grab Rug task service...")
+	log.Debug("rug module: starting grab Rug task service...")
 	for {
 		if s.queue.Size() > s.cfg.QueueMaxSize {
 			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
@@ -115,7 +123,7 @@ func (s *Rug) pullTasks() {
 			continue
 		}
 
-		log.Debugf("get %d facuet stasks\n", len(tasks))
+		log.Debugf("rug module: get %d rug tasks\n", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -133,13 +141,18 @@ func (s *Rug) handleTasks() {
 
 		for i := 0; i < s.cfg.PushBatchCount; i++ {
 			elem, ok := s.queue.Dequeue()
-			if !ok {
-				break
+			if !ok || elem == nil {
+				continue
 			}
 
-			task := elem.(biz.AddressTask)
+			task, ok := elem.(biz.AddressTask)
+			if !ok {
+				log.Error("rug module: element from queue is not a task")
+				continue
+			}
 			// s.process(task)
-			fmt.Println("processing task...", task.ID)
+
+			log.Debug("rug module: processing task", task.ID)
 			hash, err := s.rug(task)
 			if err != nil {
 				log.Error("transfer err", err)
@@ -182,35 +195,39 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 }
 
 func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
+	log.Debug("rug module: getting receipt for", task.ID, hash.Hex())
 	time.Sleep(time.Duration(s.cfg.BlockTime) * time.Millisecond)
 	// TODO handle timeout
 	for i := 0; i < 50; i++ {
 		receipt, err := s.client.TransactionReceipt(context.Background(), hash)
 		if err != nil {
-			log.Debug("get receipt failed", hash.Hex(), err)
+			log.Debug("rug module: get receipt failed", hash.Hex(), err)
 			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
 			continue
 		}
 		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status)
 		return
 	}
-	log.Error("failed to get receipt after reaching the upper limit of retry times")
+	log.Error("rug module: failed to get receipt after reaching the upper limit of retry times")
 	s.updateTask(task, hash.Hex(), 0)
 }
 
 func (s *Rug) updateNonce() {
+	log.Debug("rug module: updating nonce")
 	accountAddress := crypto.PubkeyToAddress(*s.publickKey)
 	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
 	if err != nil {
-		log.Error("get nonce failed")
+		log.Error("rug module: get nonce failed")
 		// try to reconnect the client
 		s.connect()
 		time.Sleep(100 * time.Millisecond)
 	}
+	log.Debug("rug module: new nonce", nonce)
 	s.nonce = nonce
 }
 
 func (s *Rug) connect() {
+	log.Debug("rug module: connecting client")
 	c, err := goclient.NewClient(s.url)
 	if err != nil {
 		log.Error("connect failed")
@@ -224,10 +241,12 @@ func (s *Rug) connect() {
 		log.Error("connect failed")
 		return
 	}
+	log.Debug("rug module: client is connected")
 	s.contract = instance
 }
 
 func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
+	log.Debug("rug module: running rug for", task.ID)
 	fromAddress := crypto.PubkeyToAddress(*s.publickKey)
 	nonce := s.getNonce()
 
@@ -241,8 +260,11 @@ func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
 	path[0] = common.HexToAddress(s.cfg.Path[0])
 	path[1] = common.HexToAddress(s.cfg.Path[1])
 	toAddress := fromAddress // rug tokens to the sender
-	tx, err := s.contract.SwapETHForExactTokens(opts, big.NewInt(10000000000), path, toAddress, big.NewInt(int64(time.Now().Second())+10000))
+	amount := big.NewInt(1).Mul(big.NewInt(RugAmount), big.NewInt(UINT))
+	log.Debugf("rug module: SwapETHForExactTokens, from %s, to %s, amount %d\n", fromAddress.Hex(), toAddress.Hex(), amount)
+	tx, err := s.contract.SwapETHForExactTokens(opts, amount, path, toAddress, big.NewInt(int64(time.Now().Second())+10000))
 	if err != nil {
+		log.Debug("rug module: submit rug failed", task.ID, err)
 		return common.Hash{}, err
 	}
 

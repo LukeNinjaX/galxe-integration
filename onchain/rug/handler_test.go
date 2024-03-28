@@ -2,6 +2,7 @@ package rug
 
 import (
 	"fmt"
+	"math/big"
 	"testing"
 
 	"github.com/artela-network/galxe-integration/config"
@@ -23,4 +24,9 @@ func TestNewRug(t *testing.T) {
 	for i := 0; i < 1000; i++ {
 		fmt.Println("sending swap", i)
 	}
+}
+
+func Test1(t *testing.T) {
+	num := big.NewInt(1).Mul(big.NewInt(100000), big.NewInt((1000000000000000000)))
+	fmt.Println(num.String())
 }

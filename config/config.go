@@ -45,7 +45,7 @@ func (c *FaucetConfig) FillDefaults() {
 		c.RugAddress = "0x8997ec639d49D2F08EC0e6b858f36317680A6eE7"
 	}
 	if c.RugAmount <= 0 {
-		c.RugAmount = 100000
+		c.RugAmount = 1000000
 	}
 	c.OnChain.FillDefaults()
 	c.TxConfig.FillDefaults()

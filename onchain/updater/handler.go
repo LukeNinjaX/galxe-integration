@@ -16,6 +16,8 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
+const UINT = 1000000000000000000
+
 type Updater struct {
 	url    string
 	db     *sql.DB
@@ -31,6 +33,7 @@ func NewUpdater(db *sql.DB, cfg *config.UpdaterConfig) (*Updater, error) {
 
 	c, err := goclient.NewClient(url)
 	if err != nil {
+		log.Error("update module: connect to rpc failed", err)
 		return nil, err
 	}
 
@@ -66,12 +69,12 @@ func (s *Updater) pullTasks() {
 			continue
 		}
 
-		log.Debugf("updater module: get %d tasks\n", len(tasks))
 		if len(tasks) == 0 {
 			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
+		log.Debugf("updater module: get %d tasks\n", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
