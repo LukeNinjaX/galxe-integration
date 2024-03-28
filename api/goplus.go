@@ -61,9 +61,9 @@ func (s *Server) newTasks(c *gin.Context) {
 
 	if len(tasks) > 0 {
 		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-			"message": "Already have tasks",
-			"data":    tasks,
+			"success": false,
+			"error":   "Already have tasks",
+			"data":    biz.ConvertTaskInfo(tasks),
 		})
 		return
 	}

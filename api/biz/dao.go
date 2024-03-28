@@ -190,7 +190,7 @@ func GetAccountTaskInfo(db *sql.DB, query *TaskQuery) (AccountTaskInfo, error) {
 		AccountAddress: query.AccountAddress,
 		Status:         calculateStatus(taskInfos),
 		CanSync:        calculateSyncCondition(taskInfos),
-		TaskInfos:      taskInfo(taskInfos),
+		TaskInfos:      ConvertTaskInfo(taskInfos),
 	}, nil
 }
 
@@ -227,7 +227,7 @@ func taskDescription(taskName string) TaskInfo {
 	return taskMap[taskName]
 
 }
-func taskInfo(tasks []AddressTask) []TaskInfo {
+func ConvertTaskInfo(tasks []AddressTask) []TaskInfo {
 	var taskInfos []TaskInfo
 	for _, task := range tasks {
 		// 将字符串转换为int64类型
@@ -257,6 +257,9 @@ func taskInfo(tasks []AddressTask) []TaskInfo {
 		taskInfos = append(taskInfos, taskItem)
 
 	}
+	// sort.SliceStable(taskInfos, func(i, j int) bool {
+	// 	return taskInfos[i].ID < taskInfos[j].ID
+	// })
 	return taskInfos
 
 }
