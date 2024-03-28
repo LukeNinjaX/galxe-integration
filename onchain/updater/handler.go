@@ -51,26 +51,27 @@ func (s *Updater) Start() {
 }
 
 func (s *Updater) pullTasks() {
-	log.Debug("starting grab Updater task service...")
+	log.Debug("updater module: starting grab Updater task service...")
 	for {
 		if s.queue.Size() > s.cfg.QueueMaxSize {
+			log.Debugf("updater module: queue is full, try get tasks later\n")
 			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
 		tasks, err := s.getTasks(s.cfg.PullBatchCount)
 		if err != nil {
-			log.Error("getTasks failed", err)
+			log.Error("updater module: getTasks failed", err)
 			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
+		log.Debugf("updater module: get %d tasks\n", len(tasks))
 		if len(tasks) == 0 {
 			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
 			continue
 		}
 
-		log.Debugf("get %d facuet stasks\n", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -82,7 +83,7 @@ func (s *Updater) getTasks(count int) ([]biz.AddressTask, error) {
 }
 
 func (s *Updater) handleTasks() {
-	log.Debug("starting handling Updater task service...")
+	log.Debug("updater module: starting handling Updater task service...")
 
 	ch := make(chan struct{}, s.cfg.Concurrency)
 	for {
@@ -93,8 +94,10 @@ func (s *Updater) handleTasks() {
 		}
 		task, ok := elem.(biz.AddressTask)
 		if !ok {
+			log.Debugf("updater module: element is not a AddressTask\n")
 			continue
 		}
+		log.Debugf("updater module: handing task %d, hash: %s\n", task.ID, *task.Txs)
 		ch <- struct{}{}
 		go func(task biz.AddressTask) {
 			s.getReceipt(task)
@@ -119,6 +122,7 @@ func (s *Updater) updateTask(task biz.AddressTask, status uint64) error {
 }
 
 func (s *Updater) getReceipt(task biz.AddressTask) {
+	log.Debugf("updater module: get Receipt for task %d, hash %s\n", task.ID, *task.Txs)
 	hash := common.HexToHash(*task.Txs)
 	receipt, err := s.client.TransactionReceipt(context.Background(), hash)
 	if err != nil {
@@ -126,7 +130,7 @@ func (s *Updater) getReceipt(task biz.AddressTask) {
 			// client is disconnected
 			s.connect()
 		}
-		log.Debug("get receipt failed", hash.Hex(), err)
+		log.Debug("updater module: get receipt failed and put back into queue", "task", task.ID, "hash", hash.Hex(), err)
 		s.queue.Enqueue(task)
 	}
 
