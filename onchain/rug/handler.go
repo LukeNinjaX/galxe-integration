@@ -17,8 +17,8 @@ import (
 	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/api/types"
 	"github.com/artela-network/galxe-integration/config"
+	"github.com/artela-network/galxe-integration/contracts/uniswapv2"
 	"github.com/artela-network/galxe-integration/goclient"
-	"github.com/artela-network/galxe-integration/uniswapv2"
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
 	log "github.com/sirupsen/logrus"
@@ -225,13 +225,23 @@ func (s *Rug) connect() {
 }
 
 func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
-	// 使用 黑名单 私钥
+	fromAddress := crypto.PubkeyToAddress(*s.publickKey)
+	nonce := s.getNonce()
 
-	// 构建交易
-	// s.contract.SwapETHForExactTokens()
+	// send a tx
+	opts := s.client.DefaultTxOpts(s.privateKey, fromAddress, &s.cfg.TxConfig)
+	opts.Nonce = big.NewInt(int64(nonce)) // we maintance the nonce ourself
+	if len(s.cfg.Path) < 2 {
+		panic("config .rug.path is not correct")
+	}
+	path := make([]common.Address, 2)
+	path[0] = common.HexToAddress(s.cfg.Path[0])
+	path[1] = common.HexToAddress(s.cfg.Path[1])
+	toAddress := fromAddress // rug tokens to the sender
+	tx, err := s.contract.SwapETHForExactTokens(opts, big.NewInt(10000000000), path, toAddress, big.NewInt(int64(time.Now().Second())+10000))
+	if err != nil {
+		return common.Hash{}, err
+	}
 
-	// 发送交易
-
-	// 让其被拦截
-	return common.Hash{}, nil
+	return tx.Hash(), nil
 }
