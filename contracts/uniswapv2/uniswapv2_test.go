@@ -21,7 +21,7 @@ func TestSend(t *testing.T) {
 	require.Equal(t, nil, err)
 	defer c.Close()
 
-	privKey, pubKey, err := goclient.ReadKey("../rug.txt")
+	privKey, pubKey, err := goclient.ReadKey("../../rug.txt")
 	require.Equal(t, nil, err)
 
 	// load contract

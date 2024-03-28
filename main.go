@@ -14,14 +14,12 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/artela-network/galxe-integration/api"
-	"github.com/artela-network/galxe-integration/common"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/db"
-	"github.com/artela-network/galxe-integration/fetcher"
-	"github.com/artela-network/galxe-integration/indexer"
 	"github.com/artela-network/galxe-integration/logging"
 	_ "github.com/artela-network/galxe-integration/logging"
 	"github.com/artela-network/galxe-integration/onchain/faucet"
+	"github.com/artela-network/galxe-integration/onchain/rug"
 )
 
 func main() {
@@ -47,29 +45,30 @@ func main() {
 		log.Fatalf("failed to connect to db: %v", err)
 	}
 
-	indexers := make([]common.Indexer, len(conf.Indexers))
-	chainFetcher, err := fetcher.NewFetcher(ctx, conf.Fetcher, driver, conn)
-	if err != nil {
-		log.Fatalf("failed to create fetcher: %v", err)
-	}
-	for i, indexerConf := range conf.Indexers {
-		indexerInstance, err := indexer.GetRegistry().GetIndexer(ctx, indexerConf, driver, conn)
-		if err != nil {
-			log.Fatalf("failed to create indexer: %v", err)
-		}
-		chainFetcher.RegisterIndexer(indexerInstance)
-		indexers[i] = indexerInstance
-	}
-	chainFetcher.Start()
+	// indexers := make([]common.Indexer, len(conf.Indexers))
+	// chainFetcher, err := fetcher.NewFetcher(ctx, conf.Fetcher, driver, conn)
+	// if err != nil {
+	// 	log.Fatalf("failed to create fetcher: %v", err)
+	// }
+	// for i, indexerConf := range conf.Indexers {
+	// 	indexerInstance, err := indexer.GetRegistry().GetIndexer(ctx, indexerConf, driver, conn)
+	// 	if err != nil {
+	// 		log.Fatalf("failed to create indexer: %v", err)
+	// 	}
+	// 	chainFetcher.RegisterIndexer(indexerInstance)
+	// 	indexers[i] = indexerInstance
+	// }
+	// chainFetcher.Start()
 
-	apiServer := api.NewServer(ctx, conf, driver, conn, chainFetcher, indexers)
+	apiServer := api.NewServer(ctx, conf, driver, conn, nil, nil)
 	apiServer.Start()
 
-	// rugTask, err := rug.NewRug(conn, conf.Rug)
-	// if err != nil {
-	// 	log.Fatalf("failed to start rug service: %v", err)
-	// }
-	// rugTask.Start()
+	rugTask, err := rug.NewRug(conn, conf.Rug)
+	if err != nil {
+		log.Fatalf("failed to start rug service: %v", err)
+	}
+	rugTask.Start()
+
 	faucet, err := faucet.NewFaucet(conn, conf.Faucet)
 	if err != nil {
 		log.Fatalf("failed to start rug service: %v", err)

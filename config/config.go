@@ -18,12 +18,20 @@ type Config struct {
 type FaucetConfig struct {
 	OnChain
 	TxConfig
-	TransferAmount int64 `json:"transfer_amount"`
+	TransferAmount int64  `json:"transfer_amount"`
+	RugAddress     string `json:"rug_address"`
+	RugAmount      int64  `json:"rug_amount"`
 }
 
 func (c *FaucetConfig) FillDefaults() {
 	if c.TransferAmount <= 0 {
 		c.TransferAmount = 1
+	}
+	if c.RugAddress == "" {
+		c.RugAddress = "0x8997ec639d49D2F08EC0e6b858f36317680A6eE7"
+	}
+	if c.RugAmount <= 0 {
+		c.RugAmount = 100000
 	}
 	c.OnChain.FillDefaults()
 	c.TxConfig.FillDefaults()

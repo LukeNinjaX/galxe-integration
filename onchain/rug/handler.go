@@ -151,6 +151,7 @@ func (s *Rug) handleTasks() {
 					s.connect()
 				}
 				s.queue.Enqueue(task)
+				continue
 			}
 
 			wg.Add(1)
@@ -176,6 +177,7 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 	}
 	req.TaskStatus = &taskStatus
 
+	log.Debugf("update rug task: %d, req: %+v\n", task.ID, req)
 	return biz.UpdateTask(s.db, req)
 }
 
