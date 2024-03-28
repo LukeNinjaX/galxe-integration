@@ -184,7 +184,7 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
 	time.Sleep(time.Duration(s.cfg.BlockTime) * time.Millisecond)
 	// TODO handle timeout
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 50; i++ {
 		receipt, err := s.client.TransactionReceipt(context.Background(), hash)
 		if err != nil {
 			log.Debug("get receipt failed", hash.Hex(), err)
