@@ -177,7 +177,7 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 	}
 	req.TaskStatus = &taskStatus
 
-	log.Debugf("update rug task: %d, req: %+v\n", task.ID, req)
+	log.Debugf("update rug task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
@@ -217,6 +217,7 @@ func (s *Rug) connect() {
 		return
 	}
 	s.client = c
+	s.updateNonce()
 	contractAddress := common.HexToAddress(s.cfg.ContractAddress)
 	instance, err := uniswapv2.NewUniswapV2(contractAddress, c)
 	if err != nil {

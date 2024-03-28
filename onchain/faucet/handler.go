@@ -191,7 +191,7 @@ func (s *Faucet) updateTask(task biz.AddressTask, memo string, status uint64) er
 	}
 	req.TaskStatus = &taskStatus
 
-	log.Debugf("update faucet task: %d, req: %+v\n", task.ID, req)
+	log.Debugf("update faucet task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
@@ -200,7 +200,7 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 	// TODO handle timeout
 	var transferReceipt, rugReceipt *coretypes.Receipt
 	var err error
-	for i := 0; i < 10; i++ {
+	for i := 0; i < 50; i++ {
 		if transferReceipt == nil {
 			transferReceipt, err = s.client.TransactionReceipt(context.Background(), hashTransfer)
 			if err != nil {
@@ -230,7 +230,8 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 		}
 	}
 	log.Error("failed to get receipt after reaching the upper limit of retry times")
-	s.updateTask(task, hashTransfer.Hex(), 0)
+	memo := fmt.Sprintf("%s,%s", transferReceipt.TxHash.Hex(), rugReceipt.TxHash.Hex())
+	s.updateTask(task, memo, 0)
 }
 
 func (s *Faucet) updateNonce() {
@@ -252,4 +253,11 @@ func (s *Faucet) connect() {
 		return
 	}
 	s.client = c
+	s.updateNonce()
+
+	instance, err := rug.NewRug(common.HexToAddress(s.cfg.RugAddress), c)
+	if err != nil {
+		log.Error("load rug contract failed", err)
+	}
+	s.rug = instance
 }
