@@ -22,8 +22,8 @@ type UpdateTaskQuery struct {
 	JobBatchId *string `json:"jobBatchId" xml:"jobBatchId"`
 
 	// where condition
-	ID             int64   `json:"id" xml:"id" binding:"required"`
-	AccountAddress *string `json:"accountAddress" xml:"address" binding:"required"`
+	ID             int64   `json:"id" xml:"id"`
+	AccountAddress *string `json:"accountAddress" xml:"address"`
 	TaskName       *string `json:"taskName" xml:"taskName" `
 	StatusEqual    *string `json:"statusEqual" xml:"statusEqual"`
 }
