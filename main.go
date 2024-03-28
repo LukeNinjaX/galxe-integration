@@ -20,6 +20,7 @@ import (
 	_ "github.com/artela-network/galxe-integration/logging"
 	"github.com/artela-network/galxe-integration/onchain/faucet"
 	"github.com/artela-network/galxe-integration/onchain/rug"
+	"github.com/artela-network/galxe-integration/onchain/updater"
 )
 
 func main() {
@@ -63,17 +64,26 @@ func main() {
 	apiServer := api.NewServer(ctx, conf, driver, conn, nil, nil)
 	apiServer.Start()
 
-	rugTask, err := rug.NewRug(conn, conf.Rug)
+	rugServ, err := rug.NewRug(conn, conf.Rug)
 	if err != nil {
-		log.Fatalf("failed to start rug service: %v", err)
+		log.Error("failed to start rug service", err)
+		os.Exit(-1)
 	}
-	rugTask.Start()
+	rugServ.Start()
 
-	faucet, err := faucet.NewFaucet(conn, conf.Faucet)
+	faucetServ, err := faucet.NewFaucet(conn, conf.Faucet)
 	if err != nil {
-		log.Fatalf("failed to start rug service: %v", err)
+		log.Error("failed to start faucet service", err)
+		os.Exit(-1)
 	}
-	faucet.Start()
+	faucetServ.Start()
+
+	updaterServ, err := updater.NewUpdater(conn, conf.Updater)
+	if err != nil {
+		log.Error("failed to start updater service", err)
+		os.Exit(-1)
+	}
+	updaterServ.Start()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGKILL, syscall.SIGINT)
