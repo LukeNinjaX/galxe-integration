@@ -136,11 +136,11 @@ func (s *Faucet) handleTasks() {
 				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
 					// nonce is not match, update the nonce
 					s.updateNonce()
-				} else if strings.Contains(err.Error(), "connected") { // TODO fix error string
+				} else if strings.Contains(err.Error(), "connection refused") {
 					// client is disconnected
 					s.connect()
 				}
-				s.queue.Enqueue(task) // TODO add retry limition
+				s.queue.Enqueue(task)
 			}
 
 			wg.Add(1)
