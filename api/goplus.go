@@ -89,24 +89,8 @@ func (s *Server) newTasks(c *gin.Context) {
 func (s *Server) updateTask(c *gin.Context) {
 	taskUpQuery := biz.UpdateTaskQuery{}
 
-	if errA := c.ShouldBindBodyWith(&taskUpQuery, binding.JSON); errA == nil {
+	if errA := c.ShouldBindBodyWith(&taskUpQuery, binding.JSON); errA != nil {
 		// txinput 有值 txHash 没有值的话，txhash 设置一下
-
-		err := biz.UpdateTask(s.db, &taskUpQuery)
-		if err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{
-				"success": false,
-				"error":   "Failed to update task " + err.Error(),
-			})
-			return
-		}
-		// 返回查询结果
-		c.JSON(http.StatusOK, gin.H{
-			"success": true,
-		})
-
-		// 这时, 复用存储在上下文中的 body。
-	} else {
 		log.Errorf("Failed to bind body: %v", errA)
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -114,6 +98,19 @@ func (s *Server) updateTask(c *gin.Context) {
 		})
 		return
 	}
+
+	err := biz.UpdateTask(s.db, &taskUpQuery)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "Failed to update task " + err.Error(),
+		})
+		return
+	}
+	// 返回查询结果
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+	})
 
 }
 

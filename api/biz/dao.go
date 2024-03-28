@@ -109,6 +109,27 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 	if query.AccountAddress == nil && query.ID == 0 {
 		return fmt.Errorf("address or id cannot be empty")
 	}
+	if query.ID != 0 && query.TaskStatus != nil {
+		task, err2 := GetTask(db, "", "", query.ID)
+		if err2 != nil {
+			return fmt.Errorf("Task not found.")
+		}
+		if query.TaskStatus != nil && task.TaskStatus != nil {
+			// 更新到1 ，原有状态必须是 0,或 4
+			if *query.TaskStatus == "1" && (!(*task.TaskStatus == "0" || *task.TaskStatus == "4")) {
+				return fmt.Errorf("when update  status to 1 Task status is not 0 or 4.")
+			}
+			if *query.TaskStatus == "2" && (*task.TaskStatus != "1") {
+				return fmt.Errorf("when update status to 2 Task status is not 1.")
+			}
+			if *query.TaskStatus == "3" && (!(*task.TaskStatus == "1" || *task.TaskStatus == "2")) {
+				return fmt.Errorf("when update status  to 3  Task status is not 2.")
+			}
+			if *query.TaskStatus == "4" && (*task.TaskStatus != "2") {
+				return fmt.Errorf("when update status to 4 Task status is not 2.")
+			}
+		}
+	}
 
 	var queryBuilder strings.Builder
 	var args []interface{}
@@ -381,11 +402,12 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 	return addressTasks, nil
 }
 
-func GetTask(db *sql.DB, addr string, taskName string) (AddressTask, error) {
+func GetTask(db *sql.DB, addr string, taskName string, id int64) (AddressTask, error) {
 	addressTask := AddressTask{}
 	tasks, err := GetTasks(db, &TaskQuery{
 		AccountAddress: addr,
 		TaskName:       taskName,
+		ID:             id,
 	})
 	if err != nil || len(tasks) == 0 {
 		return addressTask, err

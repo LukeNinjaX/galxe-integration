@@ -14,7 +14,7 @@ func GetFaucetTask(db *sql.DB, limit int) ([]AddressTask, error) {
 }
 
 func GetAspectPullTask(db *sql.DB, limit int) ([]AddressTask, error) {
-	return lockTasksForHandler(db, limit, types.Task_Name_RugPull)
+	return lockTasksForHandler(db, limit, types.Task_Name_AspectPull)
 }
 
 func GetAddLiquidityTask(db *sql.DB, limit int) ([]AddressTask, error) {
