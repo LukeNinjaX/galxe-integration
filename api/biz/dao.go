@@ -340,7 +340,7 @@ func GetTasks(db *sql.DB, query *TaskQuery) ([]AddressTask, error) {
 	// 去除末尾的逗号和空格
 	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
 
-	querySql = querySql + " ORDER BY ID DESC "
+	querySql = querySql + " ORDER BY ID ASC "
 	if query.LimitNum > 0 {
 		querySql = querySql + fmt.Sprintf(" LIMIT %d", query.LimitNum)
 	}
