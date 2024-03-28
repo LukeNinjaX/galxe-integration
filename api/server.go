@@ -73,7 +73,7 @@ func NewServer(ctx context.Context, config *config.Config, _ string, db *sql.DB,
 	apiGroup := r.Group("/api")
 	apiGroup.GET("/ping", s.ping)
 	apiGroup.GET("/jit-gaming/:address", s.completedJITGaming)
-	apiGroup.GET("/metrics", s.metrics)
+	// apiGroup.GET("/metrics", s.metrics)
 
 	plusGroup := r.Group("/api/goplus/")
 	plusGroup.GET("/tasks", s.getTasks)

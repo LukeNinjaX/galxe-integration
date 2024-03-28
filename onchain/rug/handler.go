@@ -17,8 +17,8 @@ import (
 	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/api/types"
 	"github.com/artela-network/galxe-integration/config"
+	"github.com/artela-network/galxe-integration/contracts/uniswapv2"
 	"github.com/artela-network/galxe-integration/goclient"
-	"github.com/artela-network/galxe-integration/uniswapv2"
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
 	log "github.com/sirupsen/logrus"
@@ -146,11 +146,12 @@ func (s *Rug) handleTasks() {
 				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
 					// nonce is not match, update the nonce
 					s.updateNonce()
-				} else if strings.Contains(err.Error(), "connected") { // TODO fix error string
+				} else if strings.Contains(err.Error(), "connection refused") {
 					// client is disconnected
 					s.connect()
 				}
-				s.queue.Enqueue(task) // TODO add retry limition
+				s.queue.Enqueue(task)
+				continue
 			}
 
 			wg.Add(1)
@@ -176,6 +177,7 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error
 	}
 	req.TaskStatus = &taskStatus
 
+	log.Debugf("update rug task: %d, req: %+v\n", task.ID, req)
 	return biz.UpdateTask(s.db, req)
 }
 
@@ -215,16 +217,33 @@ func (s *Rug) connect() {
 		return
 	}
 	s.client = c
+	contractAddress := common.HexToAddress(s.cfg.ContractAddress)
+	instance, err := uniswapv2.NewUniswapV2(contractAddress, c)
+	if err != nil {
+		log.Error("connect failed")
+		return
+	}
+	s.contract = instance
 }
 
 func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
-	// 使用 黑名单 私钥
+	fromAddress := crypto.PubkeyToAddress(*s.publickKey)
+	nonce := s.getNonce()
 
-	// 构建交易
-	s.contract.SwapETHForExactTokens()
+	// send a tx
+	opts := s.client.DefaultTxOpts(s.privateKey, fromAddress, &s.cfg.TxConfig)
+	opts.Nonce = big.NewInt(int64(nonce)) // we maintance the nonce ourself
+	if len(s.cfg.Path) < 2 {
+		panic("config .rug.path is not correct")
+	}
+	path := make([]common.Address, 2)
+	path[0] = common.HexToAddress(s.cfg.Path[0])
+	path[1] = common.HexToAddress(s.cfg.Path[1])
+	toAddress := fromAddress // rug tokens to the sender
+	tx, err := s.contract.SwapETHForExactTokens(opts, big.NewInt(10000000000), path, toAddress, big.NewInt(int64(time.Now().Second())+10000))
+	if err != nil {
+		return common.Hash{}, err
+	}
 
-	// 发送交易
-
-	// 让其被拦截
-	return common.Hash{}, nil
+	return tx.Hash(), nil
 }

@@ -18,12 +18,20 @@ type Config struct {
 type FaucetConfig struct {
 	OnChain
 	TxConfig
-	TransferAmount int64 `json:"transfer_amount"`
+	TransferAmount int64  `json:"transfer_amount"`
+	RugAddress     string `json:"rug_address"`
+	RugAmount      int64  `json:"rug_amount"`
 }
 
 func (c *FaucetConfig) FillDefaults() {
 	if c.TransferAmount <= 0 {
 		c.TransferAmount = 1
+	}
+	if c.RugAddress == "" {
+		c.RugAddress = "0x8997ec639d49D2F08EC0e6b858f36317680A6eE7"
+	}
+	if c.RugAmount <= 0 {
+		c.RugAmount = 100000
 	}
 	c.OnChain.FillDefaults()
 	c.TxConfig.FillDefaults()
@@ -32,12 +40,23 @@ func (c *FaucetConfig) FillDefaults() {
 type RugConfig struct {
 	OnChain
 	TxConfig
-	ContractAddress string `json:"contract_address"`
+	ContractAddress string   `json:"contract_address"`
+	Path            []string `json:"path"`
 }
 
 func (c *RugConfig) FillDefaults() {
 	c.OnChain.FillDefaults()
 	c.TxConfig.FillDefaults()
+
+	if c.ContractAddress == "" {
+		c.ContractAddress = "0xa646F6607af459917EFc14957bADC0Eb87f6dA7c"
+	}
+
+	if len(c.Path) == 0 {
+		c.Path = make([]string, 2)
+		c.Path[0] = "0xaDCd43c78A914c6B14171aB1380bCFcfa25cd3AD"
+		c.Path[1] = "0x8997ec639d49D2F08EC0e6b858f36317680A6eE7"
+	}
 }
 
 type TxConfig struct {
