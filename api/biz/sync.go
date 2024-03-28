@@ -139,7 +139,7 @@ func createSign(body *PostBody, config *config.GoPlusConfig) (string, string, er
 
 // Check all task compiled
 func checkAllTaskCompiled(db *sql.DB, addr string) (bool, error) {
-	tasks, getErr := GetTask(db, addr, "Sync")
+	tasks, getErr := GetTask(db, addr, "Sync", 0)
 	if getErr != nil {
 		return false, getErr
 	}
