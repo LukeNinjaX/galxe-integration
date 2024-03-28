@@ -117,7 +117,7 @@ func (s *Updater) updateTask(task biz.AddressTask, status uint64) error {
 	}
 	req.TaskStatus = &taskStatus
 
-	log.Debugf("update addliquidity task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
+	log.Debugf("update addliquidity task: %d, hash %s, status %s\n", req.ID, *task.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
