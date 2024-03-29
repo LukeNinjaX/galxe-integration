@@ -16,8 +16,6 @@ import (
 	log "github.com/sirupsen/logrus"
 )
 
-const UINT = 1000000000000000000
-
 type Updater struct {
 	url    string
 	db     *sql.DB
@@ -135,10 +133,11 @@ func (s *Updater) getReceipt(task biz.AddressTask) {
 		}
 		log.Debug("updater module: get receipt failed and put back into queue", "task", task.ID, "hash", hash.Hex(), err)
 		s.queue.Enqueue(task)
+		return
 	}
 
 	if receipt == nil {
-		s.updateTask(task, 0)
+		s.queue.Enqueue(task)
 		return
 	}
 
