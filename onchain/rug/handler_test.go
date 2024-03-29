@@ -2,9 +2,10 @@ package rug
 
 import (
 	"fmt"
-	"math/big"
 	"testing"
+	"time"
 
+	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/stretchr/testify/require"
 )
@@ -12,21 +13,29 @@ import (
 func TestNewRug(t *testing.T) {
 	cfg := &config.RugConfig{
 		OnChain: config.OnChain{
-			URL:     "http://47.251.58.164:8545",
-			KeyFile: "../../privateKey.txt",
+			URL:     "https://betanet-inner3.artela.network",
+			KeyFile: "../../rug.txt",
 		},
-		ContractAddress: "0x",
 	}
 	s, err := NewRug(nil, cfg)
 	require.Equal(t, nil, err)
 	defer s.client.Close()
 
-	for i := 0; i < 1000; i++ {
-		fmt.Println("sending swap", i)
+	task := biz.AddressTask{
+		ID:             123,
+		GMTCreate:      time.Time{},
+		GMTModify:      time.Time{},
+		AccountAddress: new(string),
+		TaskName:       new(string),
+		TaskStatus:     new(string),
+		Memo:           new(string),
+		Txs:            new(string),
+		TaskId:         new(string),
+		TaskTopic:      new(string),
+		JobBatchId:     new(string),
 	}
-}
 
-func Test1(t *testing.T) {
-	num := big.NewInt(1).Mul(big.NewInt(100000), big.NewInt((1000000000000000000)))
-	fmt.Println(num.String())
+	hash, err := s.rug(task)
+	require.Equal(t, nil, err)
+	fmt.Println(hash.Hex())
 }

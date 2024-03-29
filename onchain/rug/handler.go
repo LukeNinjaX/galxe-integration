@@ -47,7 +47,6 @@ type Rug struct {
 func NewRug(db *sql.DB, cfg *config.RugConfig) (*Rug, error) {
 	url := cfg.URL
 	keyfile := cfg.KeyFile
-	address := cfg.ContractAddress
 
 	cfg.FillDefaults()
 
@@ -63,7 +62,7 @@ func NewRug(db *sql.DB, cfg *config.RugConfig) (*Rug, error) {
 		return nil, err
 	}
 
-	contractAddress := common.HexToAddress(address)
+	contractAddress := common.HexToAddress(cfg.ContractAddress)
 	instance, err := uniswapv2.NewUniswapV2(contractAddress, c)
 	if err != nil {
 		log.Error("rug module: load uniswapV2 failed", err)
