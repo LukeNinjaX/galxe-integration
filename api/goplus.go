@@ -3,6 +3,7 @@ package api
 import (
 	"net/http"
 	"strconv"
+	"strings"
 
 	"github.com/gin-gonic/gin"
 	"github.com/gin-gonic/gin/binding"
@@ -49,13 +50,15 @@ func (s *Server) newTasks(c *gin.Context) {
 		})
 		return
 	}
-	err := biz.CheckCaptcha(input.CaptchaToken)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   err.Error(),
-		})
-		return
+	if !strings.EqualFold(input.CaptchaToken, "") {
+		err := biz.CheckCaptcha(input.CaptchaToken)
+		if err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{
+				"success": false,
+				"error":   err.Error(),
+			})
+			return
+		}
 	}
 
 	tasks, getErr := biz.GetTasks(s.db, &biz.TaskQuery{AccountAddress: input.AccountAddress, TaskId: input.TaskId, TaskTopic: input.TaskTopic})
