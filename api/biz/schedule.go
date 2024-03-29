@@ -33,7 +33,7 @@ func lockTasksForHandler(db *sql.DB, limit int, whereTaskName string) ([]Address
 	}
 
 	limitSql := " LIMIT $5) "
-	if strings.EqualFold(whereTaskName, types.Task_Name_GetFaucet) {
+	if strings.EqualFold(whereTaskName, types.Task_Name_AddLiquidity) {
 		limitSql = "and txs IS NOT NULL LIMIT $5) "
 	}
 	querySql := "UPDATE address_tasks SET task_status = $1, job_batch_id = $2, gmt_modify = CURRENT_TIMESTAMP WHERE id IN (SELECT id FROM address_tasks WHERE task_name=$3 and task_status = $4 " + limitSql
