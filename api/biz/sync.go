@@ -32,7 +32,10 @@ type ResponseData struct {
 	} `json:"result"`
 }
 
-func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) error {
+// init by main
+var GoPlus_Config *config.GoPlusConfig
+
+func SyncStatus(db *sql.DB, input *InitTaskQuery) error {
 	compiled, err := checkAllTaskCompiled(db, input.AccountAddress)
 	if err != nil {
 		return err
@@ -42,7 +45,7 @@ func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) e
 	}
 
 	postBody := &PostBody{
-		ChannelCode:   config.ChannelCode,
+		ChannelCode:   GoPlus_Config.ChannelCode,
 		ChannelTaskId: input.TaskId,
 		CompleteTime:  strconv.FormatInt(time.Now().UnixMilli(), 10),
 		UserAddress:   input.AccountAddress,
@@ -52,22 +55,22 @@ func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) e
 	// body
 
 	bytesData, _ := json.Marshal(postBody)
-	pstReq, postErr := http.NewRequest("POST", config.SecwarexUrl, bytes.NewReader(bytesData))
+	pstReq, postErr := http.NewRequest("POST", GoPlus_Config.SecwarexUrl, bytes.NewReader(bytesData))
 	if postErr != nil {
 		return postErr
 	}
 
 	// header
 	pstReq.Header.Add("Content-Type", "application/json")
-	pstReq.Header.Add("manageId", config.ManageId)
+	pstReq.Header.Add("manageId", GoPlus_Config.ManageId)
 	pstReq.Header.Add("timestamp", strconv.FormatInt(time.Now().UnixMilli(), 10))
 
-	sign, s, postErr := createSign(postBody, config)
+	sign, s, postErr := createSign(postBody)
 	if postErr != nil {
 		return postErr
 	}
 	pstReq.Header.Add("sign", sign)
-	log.Info("goplus sync url| ", config.SecwarexUrl, "| body|", string(bytesData), "| sign: |", sign, "| sign plaintext: |", s)
+	log.Info("goplus sync url| ", GoPlus_Config.SecwarexUrl, "| body|", string(bytesData), "| sign: |", sign, "| sign plaintext: |", s)
 
 	resp, doErr := client.Do(pstReq)
 	if doErr != nil {
@@ -89,7 +92,7 @@ func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) e
 	if responseData.Result.Status == true {
 		topic := types.Task_Topic_Sys
 		status := string(types.TaskStatusSuccess)
-		taskName := "Sync"
+		taskName := types.Task_Name_Sync
 		result := string(body)
 		updateTaskQuery := &UpdateTaskQuery{
 			TaskTopic:      &topic,
@@ -108,7 +111,7 @@ func SyncStatus(db *sql.DB, config *config.GoPlusConfig, input *InitTaskQuery) e
 	return nil
 }
 
-func createSign(body *PostBody, config *config.GoPlusConfig) (string, string, error) {
+func createSign(body *PostBody) (string, string, error) {
 
 	var queryBuilder strings.Builder
 	queryBuilder.WriteString("channelCode")
@@ -121,7 +124,7 @@ func createSign(body *PostBody, config *config.GoPlusConfig) (string, string, er
 	queryBuilder.WriteString(body.CompleteTime)
 
 	queryBuilder.WriteString("manageKey")
-	queryBuilder.WriteString(config.ManageKey)
+	queryBuilder.WriteString(GoPlus_Config.ManageKey)
 
 	queryBuilder.WriteString("timestamp")
 	queryBuilder.WriteString(strconv.FormatInt(time.Now().UnixMilli(), 10))
@@ -139,7 +142,7 @@ func createSign(body *PostBody, config *config.GoPlusConfig) (string, string, er
 
 // Check all task compiled
 func checkAllTaskCompiled(db *sql.DB, addr string) (bool, error) {
-	tasks, getErr := GetTask(db, addr, "Sync", 0)
+	tasks, getErr := GetTask(db, addr, types.Task_Name_Sync, 0)
 	if getErr != nil {
 		return false, getErr
 	}

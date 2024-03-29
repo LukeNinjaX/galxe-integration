@@ -107,6 +107,7 @@ func (s *Server) updateTask(c *gin.Context) {
 		})
 		return
 	}
+
 	// 返回查询结果
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
@@ -131,7 +132,7 @@ func (s *Server) syncStatus(c *gin.Context) {
 		return
 	}
 
-	err := biz.SyncStatus(s.db, s.conf.GoPlus, input)
+	err := biz.SyncStatus(s.db, input)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
@@ -141,18 +142,5 @@ func (s *Server) syncStatus(c *gin.Context) {
 	}
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-	})
-}
-func (s *Server) faucet(c *gin.Context) {
-
-	// 返回查询结果
-	c.JSON(http.StatusOK, gin.H{
-		"completed": true,
-	})
-}
-func (s *Server) rugPullInfo(c *gin.Context) {
-	// 返回查询结果
-	c.JSON(http.StatusOK, gin.H{
-		"completed": true,
 	})
 }

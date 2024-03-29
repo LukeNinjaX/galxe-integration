@@ -14,6 +14,7 @@ import (
 	log "github.com/sirupsen/logrus"
 
 	"github.com/artela-network/galxe-integration/api"
+	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/db"
 	"github.com/artela-network/galxe-integration/logging"
@@ -40,6 +41,7 @@ func main() {
 	ctx, cancel := context.WithCancel(context.Background())
 
 	conf := loadConfig(*serviceConf)
+	biz.GoPlus_Config = conf.GoPlus
 
 	conn, driver, err := db.GetDB(ctx, conf.DB)
 	if err != nil {

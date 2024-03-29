@@ -79,9 +79,7 @@ func NewServer(ctx context.Context, config *config.Config, _ string, db *sql.DB,
 	plusGroup.GET("/tasks", s.getTasks)
 	plusGroup.POST("/new-task", s.newTasks)
 	plusGroup.POST("/update-task", s.updateTask)
-	plusGroup.GET("/rug-pull", s.rugPullInfo)
 	plusGroup.POST("/sync", s.syncStatus)
-	plusGroup.POST("/faucet", s.faucet)
 
 	return s
 }

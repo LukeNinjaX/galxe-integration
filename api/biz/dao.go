@@ -190,10 +190,40 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 	// execute update statement
 	_, err := db.Exec(querySql, args...)
 
-	if query.TaskStatus != nil && strings.EqualFold(*query.TaskStatus, "3") {
-		// Determine if all tasks have been completed and synchronize goplus task status
+	// if update 3 it needs to be synchronized to goplus
+	if err == nil && strings.EqualFold(*query.TaskStatus, "3") {
+		rowQuery := &TaskQuery{}
+		if query.TaskId != nil {
+			rowQuery.TaskId = *query.TaskId
+		}
+		if query.AccountAddress != nil {
+			rowQuery.AccountAddress = *query.AccountAddress
+		}
+		tasks, taskErr := GetTasks(db, rowQuery)
+
+		if taskErr == nil {
+			return taskErr
+		}
+		if len(tasks) == 0 {
+			return nil
+		}
+
+		syncTask := tasks[0]
+		if strings.EqualFold(*syncTask.TaskName, types.Task_Name_Sync) || strings.EqualFold(*syncTask.TaskTopic, types.Task_Topic_Sys) {
+			return nil
+		}
+		// sync status to goplus
+		syncErr := SyncStatus(db, &InitTaskQuery{
+			AccountAddress: *syncTask.AccountAddress,
+			TaskId:         *syncTask.TaskId,
+			TaskTopic:      *syncTask.TaskTopic,
+		})
+		if syncErr != nil {
+			return syncErr
+		}
 
 	}
+
 	return err
 }
 func GetAccountTaskInfo(db *sql.DB, query *TaskQuery) (AccountTaskInfo, error) {

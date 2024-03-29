@@ -177,15 +177,20 @@ func (s *Rug) handleTasks() {
 	}
 }
 
-func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64) error {
+func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64, getReceiptSuccess bool) error {
 	req := &biz.UpdateTaskQuery{}
 	req.ID = task.ID
 	req.Txs = &hash
 	taskStatus := *task.TaskStatus
-	if status == 0 {
-		taskStatus = string(types.TaskStatusFail)
+	if getReceiptSuccess {
+		if status == 0 {
+			// The condition for completing the task is rug tx failed
+			taskStatus = string(types.TaskStatusSuccess)
+		} else {
+			taskStatus = string(types.TaskStatusFail)
+		}
 	} else {
-		taskStatus = string(types.TaskStatusSuccess)
+		taskStatus = string(types.TaskStatusFail)
 	}
 	req.TaskStatus = &taskStatus
 
@@ -204,11 +209,11 @@ func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
 			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
 			continue
 		}
-		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status)
+		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status, true)
 		return
 	}
 	log.Error("rug module: failed to get receipt after reaching the upper limit of retry times")
-	s.updateTask(task, hash.Hex(), 0)
+	s.updateTask(task, hash.Hex(), 0, false)
 }
 
 func (s *Rug) updateNonce() {
