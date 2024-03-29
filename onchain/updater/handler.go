@@ -98,6 +98,12 @@ func (s *Updater) handleTasks() {
 			log.Debugf("updater module: element is not a AddressTask\n")
 			continue
 		}
+
+		if task.Txs == nil {
+			log.Debugf("updater module: task.txs cannot be empty")
+			continue
+		}
+
 		log.Debugf("updater module: handing task %d, hash: %s\n", task.ID, *task.Txs)
 		ch <- struct{}{}
 		go func(task biz.AddressTask) {
