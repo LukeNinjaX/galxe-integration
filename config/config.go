@@ -46,13 +46,13 @@ type FaucetConfig struct {
 
 func (c *FaucetConfig) FillDefaults() {
 	if c.TransferAmount <= 0 {
-		c.TransferAmount = 1
+		c.TransferAmount = 2
 	}
 	if c.RugAddress == "" {
 		c.RugAddress = "0x8997ec639d49D2F08EC0e6b858f36317680A6eE7"
 	}
 	if c.RugAmount <= 0 {
-		c.RugAmount = 1000000
+		c.RugAmount = 2000000
 	}
 	c.OnChain.FillDefaults()
 	c.TxConfig.FillDefaults()
