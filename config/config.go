@@ -14,6 +14,13 @@ type Config struct {
 	Faucet    *FaucetConfig     `json:"faucet"`
 	Rug       *RugConfig        `json:"rug"`
 	Updater   *UpdaterConfig    `json:"updater"`
+	Recaptcha *RecaptchaConfig  `json:"recaptcha"`
+}
+
+// Updater get receipt and update status to db
+type RecaptchaConfig struct {
+	Secret    string `json:"secret"`
+	VerifyUrl string `json:"verify_url"`
 }
 
 // Updater get receipt and update status to db
