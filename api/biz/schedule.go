@@ -3,6 +3,7 @@ package biz
 import (
 	"database/sql"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 
@@ -31,7 +32,11 @@ func lockTasksForHandler(db *sql.DB, limit int, whereTaskName string) ([]Address
 		return nil, fmt.Errorf("limit or whereTaskName cannot be empty")
 	}
 
-	querySql := "UPDATE address_tasks SET task_status = $1, job_batch_id = $2, gmt_modify = CURRENT_TIMESTAMP WHERE id IN (SELECT id FROM address_tasks WHERE task_name=$3 and task_status = $4 LIMIT $5) "
+	limitSql := " LIMIT $5) "
+	if strings.EqualFold(whereTaskName, types.Task_Name_GetFaucet) {
+		limitSql = "and txs IS NOT NULL LIMIT $5) "
+	}
+	querySql := "UPDATE address_tasks SET task_status = $1, job_batch_id = $2, gmt_modify = CURRENT_TIMESTAMP WHERE id IN (SELECT id FROM address_tasks WHERE task_name=$3 and task_status = $4 " + limitSql
 
 	// 执行 UPDATE 语句
 	_, err := db.Exec(querySql, SetStatus, uuidV4, whereTaskName, whereStatus, limit)

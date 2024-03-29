@@ -184,11 +184,16 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 		queryBuilder.WriteString(fmt.Sprintf("%d ", len(args)+1))
 		args = append(args, query.StatusEqual)
 	}
-	// 去除末尾的逗号和空格
+	// remove commas and spaces at the end
 	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
 
-	// 执行 UPDATE 语句
+	// execute update statement
 	_, err := db.Exec(querySql, args...)
+
+	if query.TaskStatus != nil && strings.EqualFold(*query.TaskStatus, "3") {
+		// Determine if all tasks have been completed and synchronize goplus task status
+
+	}
 	return err
 }
 func GetAccountTaskInfo(db *sql.DB, query *TaskQuery) (AccountTaskInfo, error) {
