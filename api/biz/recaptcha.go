@@ -35,7 +35,7 @@ func CheckCaptcha(responseToken string) error {
 	if readErr != nil {
 		return readErr
 	}
-	log.Info("Recaptcha response:  ", string(body), " responseToken ", responseToken)
+	log.Info("Recaptcha response:  ", string(body))
 
 	responseData := &RecaptchaResponse{}
 	jErr := json.Unmarshal(body, responseData)
