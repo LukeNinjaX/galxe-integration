@@ -31,6 +31,7 @@ type InitTaskQuery struct {
 	AccountAddress string `json:"accountAddress" xml:"address" binding:"required"`
 	TaskId         string `json:"taskId" xml:"taskId"`
 	TaskTopic      string `json:"taskTopic" xml:"taskTopic"`
+	CaptchaToken   string `json:"captchaToken" xml:"captchaToken"`
 }
 type TaskQuery struct {
 	ID             int64  `json:"id" xml:"id" binding:"required"`

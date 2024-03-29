@@ -49,6 +49,15 @@ func (s *Server) newTasks(c *gin.Context) {
 		})
 		return
 	}
+	err := biz.CheckCaptcha(input.CaptchaToken)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
 	tasks, getErr := biz.GetTasks(s.db, &biz.TaskQuery{AccountAddress: input.AccountAddress, TaskId: input.TaskId, TaskTopic: input.TaskTopic})
 	if getErr != nil {
 		log.Errorf("Failed to getTasks: %v", getErr)
