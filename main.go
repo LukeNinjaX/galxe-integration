@@ -42,6 +42,7 @@ func main() {
 
 	conf := loadConfig(*serviceConf)
 	biz.GoPlus_Config = conf.GoPlus
+	biz.Recaptcha_Config = conf.Recaptcha
 
 	conn, driver, err := db.GetDB(ctx, conf.DB)
 	if err != nil {
