@@ -17,7 +17,7 @@ var Recaptcha_Config *config.RecaptchaConfig
 
 type RecaptchaResponse struct {
 	Success     bool     `json:"success"`
-	ChallengeTS int64    `json:"challenge_ts"`
+	ChallengeTS string   `json:"challenge_ts"`
 	Hostname    string   `json:"hostname"`
 	ErrorCodes  []string `json:"error-codes"`
 }
