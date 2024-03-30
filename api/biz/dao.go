@@ -70,9 +70,8 @@ type TaskInfo struct {
 
 type AccountTaskInfo struct {
 	AccountAddress string `json:"accountAddress"`
-	// 0:no task 1:part finish 2:completed
+	// 0:no task 3:part finish 3:completed
 	Status    int8       `json:"status"`
-	CanSync   bool       `json:"canSync"`
 	TaskInfos []TaskInfo `json:"taskInfos,omitempty"`
 }
 
@@ -240,14 +239,13 @@ func GetAccountTaskInfo(db *sql.DB, query *TaskQuery) (AccountTaskInfo, error) {
 		return AccountTaskInfo{
 			AccountAddress: query.AccountAddress,
 			Status:         0,
-			CanSync:        false,
 		}, nil
 	}
 	return AccountTaskInfo{
 		AccountAddress: query.AccountAddress,
 		Status:         calculateStatus(taskInfos),
-		CanSync:        calculateSyncCondition(taskInfos),
-		TaskInfos:      ConvertTaskInfo(taskInfos),
+
+		TaskInfos: ConvertTaskInfo(taskInfos),
 	}, nil
 }
 
@@ -321,30 +319,23 @@ func ConvertTaskInfo(tasks []AddressTask) []TaskInfo {
 
 }
 
-// 是否
-func calculateSyncCondition(tasks []AddressTask) bool {
-	status := calculateStatus(tasks)
-	// 2:completed
-	return status == 2
-}
 func calculateStatus(tasks []AddressTask) int8 {
 	status := 0
 	if len(tasks) == 0 {
 		return int8(status)
 	}
-	DoneStatus := "1"
 	count := 0
 	for _, task := range tasks {
-		if *task.TaskStatus == DoneStatus {
+		if strings.EqualFold(*task.TaskStatus, string(types.TaskStatusSuccess)) {
 			count += 1
 		}
 	}
-	if count == 3 {
+	if count == 4 {
 		// 2:completed
-		status = 2
+		status = 3
 	} else if count > 0 && count < 3 {
 		// 1:part finish
-		status = 1
+		status = 2
 	}
 	return int8(status)
 }
