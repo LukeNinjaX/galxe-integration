@@ -36,7 +36,7 @@ type ResponseData struct {
 var GoPlus_Config *config.GoPlusConfig
 
 func SyncStatus(db *sql.DB, input *InitTaskQuery) error {
-	compiled, err := checkAllTaskCompiled(db, input.AccountAddress)
+	compiled, err := CheckAllTaskCompiled(db, input.AccountAddress)
 	if err != nil {
 		return err
 	}
@@ -141,7 +141,7 @@ func createSign(body *PostBody) (string, string, error) {
 }
 
 // Check all task compiled
-func checkAllTaskCompiled(db *sql.DB, addr string) (bool, error) {
+func CheckAllTaskCompiled(db *sql.DB, addr string) (bool, error) {
 	tasks, getErr := GetTask(db, addr, types.Task_Name_Sync, 0)
 	if getErr != nil {
 		return false, getErr

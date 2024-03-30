@@ -156,3 +156,19 @@ func (s *Server) syncStatus(c *gin.Context) {
 		"success": true,
 	})
 }
+
+func (s *Server) isCompleted(c *gin.Context) {
+	accountAddress := c.Query("accountAddress")
+
+	compiled, err := biz.CheckAllTaskCompiled(s.db, accountAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+	c.JSON(http.StatusOK, gin.H{
+		"completed": compiled,
+	})
+}
