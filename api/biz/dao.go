@@ -201,7 +201,7 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 		}
 		tasks, taskErr := GetTasks(db, rowQuery)
 
-		if taskErr == nil {
+		if taskErr != nil {
 			return taskErr
 		}
 		if len(tasks) == 0 {
@@ -219,9 +219,8 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 			TaskTopic:      *syncTask.TaskTopic,
 		})
 		if syncErr != nil {
-			return syncErr
+			log.Info("SyncStatus error ", syncErr.Error(), *syncTask.AccountAddress)
 		}
-
 	}
 
 	return err
