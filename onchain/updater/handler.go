@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/artela-network/galxe-integration/api/biz"
@@ -24,7 +25,8 @@ type Updater struct {
 
 	cfg *config.UpdaterConfig
 
-	queue *llq.Queue
+	queue    *llq.Queue
+	uptating atomic.Bool
 }
 
 func NewUpdater(db *sql.DB, cfg *config.UpdaterConfig) (*Updater, error) {
@@ -136,7 +138,7 @@ func (s *Updater) getReceipt(task biz.AddressTask) {
 	if err != nil {
 		if strings.Contains(err.Error(), "connection refused") {
 			// client is disconnected
-			s.connect()
+			s.updateNetwork()
 		}
 		log.Debug("updater module: get receipt failed and put back into queue", "task", task.ID, "hash", hash.Hex(), err)
 		s.queue.Enqueue(task)
@@ -151,11 +153,29 @@ func (s *Updater) getReceipt(task biz.AddressTask) {
 	s.updateTask(task, receipt.Status)
 }
 
-func (s *Updater) connect() {
+func (s *Updater) updateNetwork() {
+	if s.uptating.Load() {
+		return
+	}
+
+	log.Error("faucet module: network is not valid, updating network...")
+	s.uptating.Store(true)
+	defer s.uptating.Store(false)
+	for {
+		if s.connect() {
+			log.Info("faucet module: network is connected")
+			return
+		}
+		time.Sleep(onchain.Reconnect)
+	}
+}
+
+func (s *Updater) connect() bool {
 	c, err := goclient.NewClient(s.url)
 	if err != nil {
 		log.Error("connect failed")
-		return
+		return false
 	}
 	s.client = c
+	return true
 }

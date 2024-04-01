@@ -210,11 +210,7 @@ func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
 
 	var networkErr = func(err error) bool {
 		log.Error("faucet module: transfer err", err)
-		if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
-			// nonce is not match, try to reconnect and update the nonce
-			s.updateNetwork()
-			return true
-		} else if strings.Contains(err.Error(), "connection refused") {
+		if strings.Contains(err.Error(), "connection refused") {
 			// client is disconnected
 			s.updateNetwork()
 			return true
@@ -273,11 +269,12 @@ func (s *Rug) updateNetwork() {
 		return
 	}
 
-	log.Debug("rug module: updating network...")
+	log.Error("faucet module: network is not valid, updating network...")
 	s.uptating.Store(true)
 	defer s.uptating.Store(false)
 	for {
 		if s.connect() && s.updateNonce() && s.updateContract() {
+			log.Info("faucet module: network is connected")
 			return
 		}
 		time.Sleep(onchain.Reconnect)
@@ -289,7 +286,7 @@ func (s *Rug) connect() bool {
 
 	c, err := goclient.NewClient(s.url)
 	if err != nil {
-		log.Error("faucet module: connect failed")
+		log.Error("faucet module: connect failed ", err)
 		return false
 	}
 	s.client = c
@@ -300,7 +297,7 @@ func (s *Rug) updateContract() bool {
 	contractAddress := common.HexToAddress(s.cfg.ContractAddress)
 	instance, err := uniswapv2.NewUniswapV2(contractAddress, s.client)
 	if err != nil {
-		log.Error("rug module: load uniswapV2 failed", err)
+		log.Error("rug module: load uniswapV2 failed ", err)
 		return false
 	}
 
@@ -312,7 +309,7 @@ func (s *Rug) updateNonce() bool {
 	accountAddress := crypto.PubkeyToAddress(*s.publickKey)
 	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
 	if err != nil {
-		log.Error("rug module: get nonce failed")
+		log.Error("rug module: get nonce failed ", err)
 		return false
 	}
 	s.nonce = nonce

@@ -118,7 +118,7 @@ func (c *OnChain) FillDefaults() {
 	}
 
 	if c.Concurrency <= 0 {
-		c.Concurrency = 100
+		c.Concurrency = 200
 	}
 }
 
