@@ -51,3 +51,10 @@ func lockTasksForHandler(db *sql.DB, limit int, whereTaskName string) ([]Address
 	}
 	return GetTasks(db, query)
 }
+
+// let timeout data retry
+func LetTimeoutRecordRetry(db *sql.DB) error {
+	selectSql := "UPDATE address_tasks SET task_status = '1', job_batch_id = null , gmt_modify = CURRENT_TIMESTAMP where gmt_modify < current_timestamp - interval '10 minutes' and (task_status='2')"
+	_, err := db.Exec(selectSql)
+	return err
+}
