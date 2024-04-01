@@ -150,7 +150,7 @@ func CheckAllTaskCompiled(db *sql.DB, addr string) (bool, error) {
 		return false, fmt.Errorf("Sync task have been completed")
 	}
 	// check that all four tasks have been completed；
-	countSql := "select count(*) from address_tasks where account_address=$1 and task_status=$2 and task_topic=$3"
+	countSql := "select count(*) from address_tasks where LOWER(account_address)=LOWER($1) and task_status=$2 and task_topic=$3"
 	rows, err := db.Query(countSql, addr, string(types.TaskStatusSuccess), types.Task_Topic_Goplus)
 	if err != nil {
 		return false, err
