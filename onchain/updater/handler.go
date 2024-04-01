@@ -10,6 +10,7 @@ import (
 	"github.com/artela-network/galxe-integration/api/types"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/goclient"
+	"github.com/artela-network/galxe-integration/onchain"
 	"github.com/ethereum/go-ethereum/common"
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
@@ -54,25 +55,25 @@ func (s *Updater) Start() {
 func (s *Updater) pullTasks() {
 	log.Debug("updater module: starting grab Updater task service...")
 	for {
-		if s.queue.Size() > s.cfg.QueueMaxSize {
-			log.Debugf("updater module: queue is full, try get tasks later\n")
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+		if s.queue.Size() > onchain.QueueSize {
+			log.Debugf("updater module: queue is full, try get tasks later")
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
-		tasks, err := s.getTasks(s.cfg.PullBatchCount)
+		tasks, err := s.getTasks(onchain.PullBatchCount)
 		if err != nil {
 			log.Error("updater module: getTasks failed", err)
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
 		if len(tasks) == 0 {
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
-		log.Debugf("updater module: get %d tasks\n", len(tasks))
+		log.Debugf("updater module: get %d tasks", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -90,12 +91,12 @@ func (s *Updater) handleTasks() {
 	for {
 		elem, ok := s.queue.Dequeue()
 		if !ok || elem == nil {
-			time.Sleep(time.Duration(s.cfg.PushInterval) * time.Millisecond)
+			time.Sleep(onchain.DeQuequeWait)
 			continue
 		}
 		task, ok := elem.(biz.AddressTask)
 		if !ok {
-			log.Debugf("updater module: element is not a AddressTask\n")
+			log.Debugf("updater module: element is not a AddressTask")
 			continue
 		}
 
@@ -104,7 +105,7 @@ func (s *Updater) handleTasks() {
 			continue
 		}
 
-		log.Debugf("updater module: handing task %d, hash: %s\n", task.ID, *task.Txs)
+		log.Debugf("updater module: handing task %d, hash: %s", task.ID, *task.Txs)
 		ch <- struct{}{}
 		go func(task biz.AddressTask) {
 			s.getReceipt(task)
@@ -124,12 +125,12 @@ func (s *Updater) updateTask(task biz.AddressTask, status uint64) error {
 	}
 	req.TaskStatus = &taskStatus
 
-	log.Debugf("update addliquidity task: %d, hash %s, status %s\n", req.ID, *task.Txs, *req.TaskStatus)
+	log.Debugf("update addliquidity task: %d, hash %s, status %s", req.ID, *task.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
 func (s *Updater) getReceipt(task biz.AddressTask) {
-	log.Debugf("updater module: get Receipt for task %d, hash %s\n", task.ID, *task.Txs)
+	log.Debugf("updater module: get Receipt for task %d, hash %s", task.ID, *task.Txs)
 	hash := common.HexToHash(*task.Txs)
 	receipt, err := s.client.TransactionReceipt(context.Background(), hash)
 	if err != nil {
