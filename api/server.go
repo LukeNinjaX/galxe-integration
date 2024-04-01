@@ -80,7 +80,7 @@ func NewServer(ctx context.Context, config *config.Config, _ string, db *sql.DB,
 	plusGroup.POST("/new-task", s.newTasks)
 	plusGroup.POST("/update-task", s.updateTask)
 	plusGroup.POST("/sync", s.syncStatus)
-	plusGroup.POST("/status", s.isCompleted)
+	plusGroup.GET("/status/:address", s.isCompleted)
 	return s
 }
 

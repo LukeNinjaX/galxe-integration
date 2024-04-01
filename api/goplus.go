@@ -158,7 +158,7 @@ func (s *Server) syncStatus(c *gin.Context) {
 }
 
 func (s *Server) isCompleted(c *gin.Context) {
-	accountAddress := c.Query("accountAddress")
+	accountAddress := c.Param("address")
 
 	compiled, err := biz.CheckAllTaskCompiled(s.db, accountAddress)
 	if err != nil {
