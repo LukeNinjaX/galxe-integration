@@ -62,6 +62,8 @@ type TaskInfo struct {
 	ID         int64  `json:"id,omitempty"`
 	TaskName   string `json:"taskName,omitempty"`
 	TaskStatus int8   `json:"taskStatus"`
+	TaskId     string `json:"taskId"`
+	TaskTopic  string `json:"taskTopic"`
 
 	Title string `json:"title"`
 	Memo  string `json:"memo"`
@@ -298,6 +300,12 @@ func ConvertTaskInfo(tasks []AddressTask) []TaskInfo {
 			ID:         task.ID,
 			TaskStatus: intValue,
 			Title:      description.Title,
+		}
+		if task.TaskTopic != nil {
+			taskItem.TaskTopic = *task.TaskTopic
+		}
+		if task.TaskId != nil {
+			taskItem.TaskId = *task.TaskId
 		}
 		if task.TaskName != nil {
 			taskItem.TaskName = *task.TaskName
