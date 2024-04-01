@@ -166,6 +166,12 @@ func (s *Rug) handleTasks() {
 				continue
 			}
 
+			err = s.updateTask(task, hash.Hex(), nil)
+			if err != nil {
+				log.Error("faucet module: update task failed", task.ID, err)
+				// do not return, still try to get the receipt and update to db again
+			}
+
 			wg.Add(1)
 			go func(task biz.AddressTask, hash common.Hash) {
 				s.processReceipt(task, hash)
@@ -177,24 +183,24 @@ func (s *Rug) handleTasks() {
 	}
 }
 
-func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64, getReceiptSuccess bool) error {
+func (s *Rug) updateTask(task biz.AddressTask, hash string, status *uint64) error {
 	req := &biz.UpdateTaskQuery{}
 	req.ID = task.ID
 	req.Txs = &hash
-	taskStatus := *task.TaskStatus
-	if getReceiptSuccess {
-		if status == 0 {
+	if status != nil {
+		var taskStatus string
+		if *status == 0 {
 			// The condition for completing the task is rug tx failed
 			taskStatus = string(types.TaskStatusSuccess)
 		} else {
 			taskStatus = string(types.TaskStatusFail)
 		}
+		req.TaskStatus = &taskStatus
+		log.Debugf("update rug task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	} else {
-		taskStatus = string(types.TaskStatusFail)
+		log.Debugf("update rug task: %d, hash %s\n", req.ID, *req.Txs)
 	}
-	req.TaskStatus = &taskStatus
 
-	log.Debugf("update rug task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
@@ -209,11 +215,12 @@ func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
 			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
 			continue
 		}
-		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status, true)
+		s.updateTask(task, receipt.TxHash.Hex(), &receipt.Status)
 		return
 	}
 	log.Error("rug module: failed to get receipt after reaching the upper limit of retry times")
-	s.updateTask(task, hash.Hex(), 0, false)
+	status := uint64(0)
+	s.updateTask(task, hash.Hex(), &status)
 }
 
 func (s *Rug) updateNonce() {

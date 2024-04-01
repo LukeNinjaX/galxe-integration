@@ -183,6 +183,11 @@ func (s *Faucet) handleTasks() {
 				continue
 			}
 
+			err = s.updateTask(task, memo(hashTransfer, txRug.Hash()), nil)
+			if err != nil {
+				log.Error("faucet module: update task failed", task.ID, err)
+			}
+
 			wg.Add(1)
 			go func(task biz.AddressTask, hashTransfer, hashRug common.Hash) {
 				s.processReceipt(task, hashTransfer, hashRug)
@@ -194,19 +199,21 @@ func (s *Faucet) handleTasks() {
 	}
 }
 
-func (s *Faucet) updateTask(task biz.AddressTask, memo string, status uint64) error {
+func (s *Faucet) updateTask(task biz.AddressTask, memo string, status *uint64) error {
 	req := &biz.UpdateTaskQuery{}
 	req.ID = task.ID
 	req.Txs = &memo
-	taskStatus := *task.TaskStatus
-	if status == 1 {
-		taskStatus = string(types.TaskStatusSuccess)
+	if status != nil {
+		taskStatus := string(types.TaskStatusFail)
+		if *status == 1 {
+			taskStatus = string(types.TaskStatusSuccess)
+		}
+		req.TaskStatus = &taskStatus
+		log.Debugf("faucet module: updating task, %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	} else {
-		taskStatus = string(types.TaskStatusFail)
+		log.Debugf("faucet module: updating task, %d, hash %s\n", req.ID, *req.Txs)
 	}
-	req.TaskStatus = &taskStatus
 
-	log.Debugf("faucet module: updating task, %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
@@ -240,14 +247,23 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 			if rugReceipt.Status != 1 {
 				status = rugReceipt.Status
 			}
-			memo := fmt.Sprintf("%s,%s", transferReceipt.TxHash.Hex(), rugReceipt.TxHash.Hex())
-			s.updateTask(task, memo, status)
+
+			s.updateTask(task, memo(transferReceipt.TxHash, rugReceipt.TxHash), &status)
 			return
 		}
 	}
 	log.Error("faucet module: failed to get receipt after reaching the upper limit of retry times")
-	memo := fmt.Sprintf("%s,%s", transferReceipt.TxHash.Hex(), rugReceipt.TxHash.Hex())
-	s.updateTask(task, memo, 0)
+	status := uint64(0)
+
+	s.updateTask(task, memo(transferReceipt.TxHash, rugReceipt.TxHash), &status)
+}
+
+func memo(hashes ...common.Hash) string {
+	if len(hashes) != 2 {
+		return ""
+	}
+	ret := fmt.Sprintf("%s,%s", hashes[0].Hex(), hashes[1].Hex())
+	return ret
 }
 
 func (s *Faucet) updateNonce() {
