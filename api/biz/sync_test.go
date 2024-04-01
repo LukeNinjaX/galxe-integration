@@ -11,7 +11,7 @@ func TestSend(t *testing.T) {
 
 	body := &PostBody{
 		ChannelCode:   "artela",
-		ChannelTaskId: "83115",
+		ChannelTaskId: "891b8fbef81c43c7aec3e4bfeea2c752",
 		CompleteTime:  "1697076853",
 		UserAddress:   "0x1dcabfc8807beb9c2314508f561a9ef43c9a2b03",
 	}
@@ -21,7 +21,9 @@ func TestSend(t *testing.T) {
 		ManageKey:   "mqucjot7NBTBPSjEL95tCZ4HL3BtYllV",
 		SecwarexUrl: "",
 	}
-
-	sign, s, err := createSign(body, config)
-	fmt.Print(sign, s, err)
+	GoPlus_Config = config
+	sign, s, err := createSign(body)
+	fmt.Println(sign)
+	fmt.Println(s)
+	fmt.Println(err)
 }
