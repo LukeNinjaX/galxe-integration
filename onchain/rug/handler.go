@@ -172,7 +172,7 @@ func (s *Rug) handleTasks() {
 
 		err = s.updateTask(task, hash.Hex(), nil)
 		if err != nil {
-			log.Error("faucet module: update task failed", task.ID, err)
+			log.Error("rug module: update task failed", task.ID, err)
 			// do not return, still try to get the receipt and update to db again
 		}
 
@@ -189,17 +189,14 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status *uint64) erro
 	req.ID = task.ID
 	req.Txs = &hash
 	if status != nil {
-		var taskStatus string
-		if *status == 0 {
-			// The condition for completing the task is rug tx failed
+		taskStatus := string(types.TaskStatusFail)
+		if *status == 1 {
 			taskStatus = string(types.TaskStatusSuccess)
-		} else {
-			taskStatus = string(types.TaskStatusFail)
 		}
 		req.TaskStatus = &taskStatus
-		log.Debugf("update rug task: %d, hash %s, status %s", req.ID, *req.Txs, *req.TaskStatus)
+		log.Debugf("update rug task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	} else {
-		log.Debugf("update rug task: %d, hash %s", req.ID, *req.Txs)
+		log.Debugf("update rug task: %d, hash %s\n", req.ID, *req.Txs)
 	}
 
 	return biz.UpdateTask(s.db, req)
@@ -230,10 +227,13 @@ func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
 			}
 			continue
 		}
+		if receipt == nil {
+			continue
+		}
 		s.updateTask(task, hash.Hex(), &receipt.Status)
 		return
 	}
-	log.Error("rug module: failed to get receipt after reaching the upper limit of retry times")
+	log.Errorf("rug module: failed to get receipt after reaching the upper limit of retry times, task %d, hash %s\n", task.ID, hash.Hex())
 	status := uint64(0)
 	s.updateTask(task, hash.Hex(), &status)
 }
@@ -269,12 +269,12 @@ func (s *Rug) updateNetwork() {
 		return
 	}
 
-	log.Error("faucet module: network is not valid, updating network...")
+	log.Error("rug module: network is not valid, updating network...")
 	s.uptating.Store(true)
 	defer s.uptating.Store(false)
 	for {
 		if s.connect() && s.updateNonce() && s.updateContract() {
-			log.Info("faucet module: network is connected")
+			log.Info("rug module: network is connected")
 			return
 		}
 		time.Sleep(onchain.Reconnect)
@@ -286,7 +286,7 @@ func (s *Rug) connect() bool {
 
 	c, err := goclient.NewClient(s.url)
 	if err != nil {
-		log.Error("faucet module: connect failed ", err)
+		log.Error("rug module: connect failed ", err)
 		return false
 	}
 	s.client = c

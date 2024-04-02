@@ -136,7 +136,7 @@ func (s *Faucet) handleTasks() {
 	ch := make(chan struct{}, s.cfg.Concurrency)
 	for {
 		elem, ok := s.queue.Dequeue()
-		if !ok {
+		if !ok || elem == nil {
 			time.Sleep(onchain.DeQuequeWait)
 			continue
 		}
@@ -212,9 +212,9 @@ func (s *Faucet) updateTask(task biz.AddressTask, memo string, status *uint64) e
 			taskStatus = string(types.TaskStatusSuccess)
 		}
 		req.TaskStatus = &taskStatus
-		log.Debugf("faucet module: updating task, %d, hash %s, status %s", req.ID, *req.Txs, *req.TaskStatus)
+		log.Debugf("faucet module: updating task, %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	} else {
-		log.Debugf("faucet module: updating task, %d, hash %s", req.ID, *req.Txs)
+		log.Debugf("faucet module: updating task, %d, hash %s\n", req.ID, *req.Txs)
 	}
 
 	return biz.UpdateTask(s.db, req)
@@ -269,7 +269,7 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 			return
 		}
 	}
-	log.Error("faucet module: failed to get receipt after reaching the upper limit of retry times")
+	log.Errorf("faucet module: failed to get receipt after reaching the upper limit of retry times, task %d, hash %s\n", task.ID, memo(hashTransfer, hashRug))
 	status := uint64(0)
 
 	s.updateTask(task, memo(hashTransfer, hashRug), &status)

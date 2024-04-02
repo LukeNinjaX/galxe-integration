@@ -127,30 +127,49 @@ func (s *Updater) updateTask(task biz.AddressTask, status uint64) error {
 	}
 	req.TaskStatus = &taskStatus
 
-	log.Debugf("update addliquidity task: %d, hash %s, status %s", req.ID, *task.Txs, *req.TaskStatus)
+	log.Debugf("updater moduler: update addliquidity task: %d, hash %s, status %s\n", req.ID, *task.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
 func (s *Updater) getReceipt(task biz.AddressTask) {
 	log.Debugf("updater module: get Receipt for task %d, hash %s", task.ID, *task.Txs)
-	hash := common.HexToHash(*task.Txs)
-	receipt, err := s.client.TransactionReceipt(context.Background(), hash)
-	if err != nil {
+
+	var networkErr = func(err error) bool {
+		// log.Error("updater module: get receipt err", err)
 		if strings.Contains(err.Error(), "connection refused") {
 			// client is disconnected
 			s.updateNetwork()
+			return true
 		}
-		log.Debug("updater module: get receipt failed and put back into queue", "task", task.ID, "hash", hash.Hex(), err)
-		s.queue.Enqueue(task)
-		return
+		return false
 	}
 
-	if receipt == nil {
-		s.queue.Enqueue(task)
+	hash := common.HexToHash(*task.Txs)
+	for i := 0; i < 50; i++ {
+		receipt, err := s.client.TransactionReceipt(context.Background(), hash)
+		if err != nil {
+			if strings.Contains(err.Error(), "connection refused") {
+				// client is disconnected
+				s.updateNetwork()
+			}
+			log.Debug("updater module: get receipt failed and put back into queue", "task", task.ID, "hash", hash.Hex(), err)
+			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
+			if networkErr(err) {
+				i--
+			}
+			continue
+		}
+
+		if receipt == nil {
+			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
+			continue
+		}
+		s.updateTask(task, receipt.Status)
 		return
 	}
-
-	s.updateTask(task, receipt.Status)
+	log.Errorf("updater module: failed to get receipt after reaching the upper limit of retry times, task %d, hash %s\n", task.ID, hash.Hex())
+	status := uint64(0)
+	s.updateTask(task, status)
 }
 
 func (s *Updater) updateNetwork() {
@@ -158,12 +177,12 @@ func (s *Updater) updateNetwork() {
 		return
 	}
 
-	log.Error("faucet module: network is not valid, updating network...")
+	log.Error("updater module: network is not valid, updating network...")
 	s.uptating.Store(true)
 	defer s.uptating.Store(false)
 	for {
 		if s.connect() {
-			log.Info("faucet module: network is connected")
+			log.Info("updater module: network is connected")
 			return
 		}
 		time.Sleep(onchain.Reconnect)
