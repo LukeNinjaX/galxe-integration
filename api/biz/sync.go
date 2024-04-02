@@ -142,10 +142,13 @@ func createSign(body *PostBody) (string, string, error) {
 
 // Check all task compiled
 func CheckAllTaskCompiled(db *sql.DB, addr string) (bool, error) {
+	log.Info("goplus|CheckAllTaskCompiled|address|1|", addr)
 	tasks, getErr := GetTask(db, addr, types.Task_Name_Sync, 0)
 	if getErr != nil {
 		return false, getErr
 	}
+	log.Info("goplus|CheckAllTaskCompiled|address|2|", tasks.ID, tasks.TaskStatus)
+
 	if tasks.TaskStatus != nil && strings.EqualFold(*tasks.TaskStatus, string(types.TaskStatusSuccess)) {
 		return false, fmt.Errorf("Sync task have been completed ", strconv.FormatInt(tasks.ID, 10), "  ", *tasks.TaskStatus, "  ")
 	}
