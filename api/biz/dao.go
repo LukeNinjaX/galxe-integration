@@ -203,13 +203,6 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 
 	// if update 3 it needs to be synchronized to goplus
 	if err == nil {
-		if query.TaskStatus == nil {
-			return nil
-		}
-		if !strings.EqualFold(strings.Trim(*query.TaskStatus, " "), "3") {
-			return nil
-		}
-
 		errMsg := "task status: " + *query.TaskStatus
 		if query.AccountAddress != nil {
 			errMsg += ",address: " + *query.AccountAddress
@@ -219,6 +212,14 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 		}
 
 		log.Info("goplus|start|", errMsg)
+
+		if query.TaskStatus == nil {
+			return nil
+		}
+		if !strings.EqualFold(strings.Trim(*query.TaskStatus, " "), "3") {
+			return nil
+		}
+		log.Info("goplus|test|", errMsg)
 
 		rowQuery := &TaskQuery{}
 		if query.TaskId != nil {
