@@ -19,7 +19,7 @@ func TestNewRug(t *testing.T) {
 	}
 	s, err := NewRug(nil, cfg)
 	require.Equal(t, nil, err)
-	defer s.client.Close()
+	defer s.Client().Close()
 
 	task := biz.AddressTask{
 		ID:             123,
@@ -35,7 +35,8 @@ func TestNewRug(t *testing.T) {
 		JobBatchId:     new(string),
 	}
 
-	hash, err := s.rug(task)
+	hash, err := s.send(task)
 	require.Equal(t, nil, err)
-	fmt.Println(hash.Hex())
+	require.Equal(t, 1, len(hash))
+	fmt.Println(hash[0].Hex())
 }

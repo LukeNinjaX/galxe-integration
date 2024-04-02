@@ -26,13 +26,9 @@ type RecaptchaConfig struct {
 // Updater get receipt and update status to db
 type UpdaterConfig struct {
 	OnChain
-	Concurrency int `json:"concurrency"`
 }
 
 func (c *UpdaterConfig) FillDefaults() {
-	if c.Concurrency <= 0 {
-		c.Concurrency = 10
-	}
 	c.OnChain.FillDefaults()
 }
 
@@ -110,7 +106,7 @@ type OnChain struct {
 
 func (c *OnChain) FillDefaults() {
 	if c.BlockTime <= 0 {
-		c.BlockTime = 1600
+		c.BlockTime = 400
 	}
 
 	if c.GetReceiptInterval <= 0 {
