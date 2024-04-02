@@ -190,7 +190,7 @@ func (s *Rug) updateTask(task biz.AddressTask, hash string, status *uint64) erro
 	req.Txs = &hash
 	if status != nil {
 		taskStatus := string(types.TaskStatusFail)
-		if *status == 1 {
+		if *status == 0 {
 			taskStatus = string(types.TaskStatusSuccess)
 		}
 		req.TaskStatus = &taskStatus
