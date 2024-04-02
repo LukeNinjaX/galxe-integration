@@ -203,6 +203,16 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 
 	// if update 3 it needs to be synchronized to goplus
 	if err == nil && strings.EqualFold(*query.TaskStatus, "3") {
+		errMsg := ""
+		if query.AccountAddress != nil {
+			errMsg += ",address: " + *query.AccountAddress
+		}
+		if query.TaskId != nil {
+			errMsg += ",taskId: " + *query.TaskId
+		}
+
+		log.Info(":goplus syncStatus start ", errMsg)
+
 		rowQuery := &TaskQuery{}
 		if query.TaskId != nil {
 			rowQuery.TaskId = *query.TaskId
@@ -230,14 +240,8 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 			TaskTopic:      *syncTask.TaskTopic,
 		})
 		if syncErr != nil {
-			errMsg := ""
-			if query.AccountAddress != nil {
-				errMsg += ",address: " + *syncTask.AccountAddress
-			}
-			if query.TaskId != nil {
-				errMsg += ",taskId: " + *syncTask.TaskId
-			}
-			log.Info("goplus syncStatus error ", syncErr.Error(), errMsg)
+
+			log.Info(":goplus syncStatus error ", syncErr.Error(), errMsg)
 		}
 	}
 

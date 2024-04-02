@@ -41,7 +41,7 @@ func SyncStatus(db *sql.DB, input *InitTaskQuery) error {
 		return err
 	}
 	if compiled == false {
-		return fmt.Errorf("not all tasks have been completed")
+		return fmt.Errorf(" All tasks haven't been completed")
 	}
 
 	postBody := &PostBody{
@@ -70,7 +70,7 @@ func SyncStatus(db *sql.DB, input *InitTaskQuery) error {
 		return postErr
 	}
 	pstReq.Header.Add("sign", sign)
-	log.Info("goplus sync url| ", GoPlus_Config.SecwarexUrl, "| body|", string(bytesData), "| sign: |", sign, "| sign plaintext: |", s)
+	log.Info("goplus|request|", GoPlus_Config.SecwarexUrl, "|body|", string(bytesData), "|sign|", sign, "|plaintext|", s)
 
 	resp, doErr := client.Do(pstReq)
 	if doErr != nil {
@@ -80,7 +80,7 @@ func SyncStatus(db *sql.DB, input *InitTaskQuery) error {
 	if readErr != nil {
 		return readErr
 	}
-	log.Info("goplus response:  ", string(body), " address ", input.AccountAddress)
+	log.Info("goplus|response|", string(body), "|address|", input.AccountAddress)
 
 	responseData := &ResponseData{}
 	jErr := json.Unmarshal(body, responseData)
