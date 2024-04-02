@@ -188,9 +188,18 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 	}
 	// remove commas and spaces at the end
 	querySql := strings.TrimSuffix(queryBuilder.String(), ", ")
-
+	tx, txErr := db.Begin()
+	if txErr != nil {
+		return txErr
+	}
+	// Defer a rollback in case anything fails.
+	defer tx.Rollback()
 	// execute update statement
-	_, err := db.Exec(querySql, args...)
+	_, err := tx.Exec(querySql, args...)
+	// Commit the transaction.
+	if txErr = tx.Commit(); txErr != nil {
+		return txErr
+	}
 
 	// if update 3 it needs to be synchronized to goplus
 	if err == nil && strings.EqualFold(*query.TaskStatus, "3") {
@@ -221,7 +230,14 @@ func UpdateTask(db *sql.DB, query *UpdateTaskQuery) error {
 			TaskTopic:      *syncTask.TaskTopic,
 		})
 		if syncErr != nil {
-			log.Info("SyncStatus error ", syncErr.Error(), *syncTask.AccountAddress)
+			errMsg := ""
+			if query.AccountAddress != nil {
+				errMsg += ",address: " + *syncTask.AccountAddress
+			}
+			if query.TaskId != nil {
+				errMsg += ",taskId: " + *syncTask.TaskId
+			}
+			log.Info("goplus syncStatus error ", syncErr.Error(), errMsg)
 		}
 	}
 
