@@ -47,7 +47,7 @@ func SyncStatus(db *sql.DB, input *InitTaskQuery) error {
 	postBody := &PostBody{
 		ChannelCode:   GoPlus_Config.ChannelCode,
 		ChannelTaskId: input.TaskId,
-		CompleteTime:  strconv.FormatInt(time.Now().UnixMilli(), 10),
+		CompleteTime:  strconv.FormatInt(time.Now().Unix(), 10),
 		UserAddress:   input.AccountAddress,
 	}
 
