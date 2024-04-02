@@ -4,12 +4,14 @@ import (
 	"context"
 	"database/sql"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/api/types"
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/goclient"
+	"github.com/artela-network/galxe-integration/onchain"
 	"github.com/ethereum/go-ethereum/common"
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
@@ -23,7 +25,8 @@ type Updater struct {
 
 	cfg *config.UpdaterConfig
 
-	queue *llq.Queue
+	queue    *llq.Queue
+	uptating atomic.Bool
 }
 
 func NewUpdater(db *sql.DB, cfg *config.UpdaterConfig) (*Updater, error) {
@@ -54,25 +57,25 @@ func (s *Updater) Start() {
 func (s *Updater) pullTasks() {
 	log.Debug("updater module: starting grab Updater task service...")
 	for {
-		if s.queue.Size() > s.cfg.QueueMaxSize {
-			log.Debugf("updater module: queue is full, try get tasks later\n")
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+		if s.queue.Size() > onchain.QueueSize {
+			log.Debugf("updater module: queue is full, try get tasks later")
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
-		tasks, err := s.getTasks(s.cfg.PullBatchCount)
+		tasks, err := s.getTasks(onchain.PullBatchCount)
 		if err != nil {
 			log.Error("updater module: getTasks failed", err)
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
 		if len(tasks) == 0 {
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
-		log.Debugf("updater module: get %d tasks\n", len(tasks))
+		log.Debugf("updater module: get %d tasks", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -90,12 +93,12 @@ func (s *Updater) handleTasks() {
 	for {
 		elem, ok := s.queue.Dequeue()
 		if !ok || elem == nil {
-			time.Sleep(time.Duration(s.cfg.PushInterval) * time.Millisecond)
+			time.Sleep(onchain.DeQuequeWait)
 			continue
 		}
 		task, ok := elem.(biz.AddressTask)
 		if !ok {
-			log.Debugf("updater module: element is not a AddressTask\n")
+			log.Debugf("updater module: element is not a AddressTask")
 			continue
 		}
 
@@ -104,7 +107,7 @@ func (s *Updater) handleTasks() {
 			continue
 		}
 
-		log.Debugf("updater module: handing task %d, hash: %s\n", task.ID, *task.Txs)
+		log.Debugf("updater module: handing task %d, hash: %s", task.ID, *task.Txs)
 		ch <- struct{}{}
 		go func(task biz.AddressTask) {
 			s.getReceipt(task)
@@ -124,37 +127,74 @@ func (s *Updater) updateTask(task biz.AddressTask, status uint64) error {
 	}
 	req.TaskStatus = &taskStatus
 
-	log.Debugf("update addliquidity task: %d, hash %s, status %s\n", req.ID, *task.Txs, *req.TaskStatus)
+	log.Debugf("updater moduler: update addliquidity task: %d, hash %s, status %s\n", req.ID, *task.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
 func (s *Updater) getReceipt(task biz.AddressTask) {
-	log.Debugf("updater module: get Receipt for task %d, hash %s\n", task.ID, *task.Txs)
-	hash := common.HexToHash(*task.Txs)
-	receipt, err := s.client.TransactionReceipt(context.Background(), hash)
-	if err != nil {
+	log.Debugf("updater module: get Receipt for task %d, hash %s", task.ID, *task.Txs)
+
+	var networkErr = func(err error) bool {
+		// log.Error("updater module: get receipt err", err)
 		if strings.Contains(err.Error(), "connection refused") {
 			// client is disconnected
-			s.connect()
+			s.updateNetwork()
+			return true
 		}
-		log.Debug("updater module: get receipt failed and put back into queue", "task", task.ID, "hash", hash.Hex(), err)
-		s.queue.Enqueue(task)
-		return
+		return false
 	}
 
-	if receipt == nil {
-		s.queue.Enqueue(task)
+	hash := common.HexToHash(*task.Txs)
+	for i := 0; i < 50; i++ {
+		receipt, err := s.client.TransactionReceipt(context.Background(), hash)
+		if err != nil {
+			if strings.Contains(err.Error(), "connection refused") {
+				// client is disconnected
+				s.updateNetwork()
+			}
+			log.Debug("updater module: get receipt failed and put back into queue", "task", task.ID, "hash", hash.Hex(), err)
+			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
+			if networkErr(err) {
+				i--
+			}
+			continue
+		}
+
+		if receipt == nil {
+			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
+			continue
+		}
+		s.updateTask(task, receipt.Status)
 		return
 	}
-
-	s.updateTask(task, receipt.Status)
+	log.Errorf("updater module: failed to get receipt after reaching the upper limit of retry times, task %d, hash %s\n", task.ID, hash.Hex())
+	status := uint64(0)
+	s.updateTask(task, status)
 }
 
-func (s *Updater) connect() {
+func (s *Updater) updateNetwork() {
+	if s.uptating.Load() {
+		return
+	}
+
+	log.Error("updater module: network is not valid, updating network...")
+	s.uptating.Store(true)
+	defer s.uptating.Store(false)
+	for {
+		if s.connect() {
+			log.Info("updater module: network is connected")
+			return
+		}
+		time.Sleep(onchain.Reconnect)
+	}
+}
+
+func (s *Updater) connect() bool {
 	c, err := goclient.NewClient(s.url)
 	if err != nil {
 		log.Error("connect failed")
-		return
+		return false
 	}
 	s.client = c
+	return true
 }

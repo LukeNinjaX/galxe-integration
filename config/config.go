@@ -103,42 +103,22 @@ func (c *TxConfig) FillDefaults() {
 type OnChain struct {
 	URL                string `json:"url"`
 	KeyFile            string `json:"keyfile"`
-	PullInterval       int    `json:"pull_interval"`
-	PullBatchCount     int    `json:"pull_batch_count"`
-	PushInterval       int    `json:"push_interval"`
-	PushBatchCount     int    `json:"push_batch_count"`
-	QueueMaxSize       int    `json:"queue_max_size"`
 	BlockTime          int    `json:"block_time"`
 	GetReceiptInterval int    `json:"get_receipt_interval"`
+	Concurrency        int    `json:"concurrency"`
 }
 
 func (c *OnChain) FillDefaults() {
-	if c.PullInterval <= 0 {
-		c.PullInterval = 1000
-	}
-
-	if c.PullBatchCount <= 0 {
-		c.PullBatchCount = 20
-	}
-
-	if c.PushInterval <= 0 {
-		c.PushInterval = 1000
-	}
-
-	if c.PushBatchCount <= 0 {
-		c.PushBatchCount = 50
-	}
-
-	if c.QueueMaxSize <= 0 {
-		c.QueueMaxSize = 200
-	}
-
 	if c.BlockTime <= 0 {
 		c.BlockTime = 1600
 	}
 
 	if c.GetReceiptInterval <= 0 {
 		c.GetReceiptInterval = 100
+	}
+
+	if c.Concurrency <= 0 {
+		c.Concurrency = 200
 	}
 }
 

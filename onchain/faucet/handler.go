@@ -8,6 +8,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -19,6 +20,7 @@ import (
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/contracts/rug"
 	"github.com/artela-network/galxe-integration/goclient"
+	"github.com/artela-network/galxe-integration/onchain"
 	coretypes "github.com/ethereum/go-ethereum/core/types"
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
@@ -40,7 +42,8 @@ type Faucet struct {
 
 	cfg *config.FaucetConfig
 
-	queue *llq.Queue
+	queue    *llq.Queue
+	uptating atomic.Bool
 }
 
 func NewFaucet(db *sql.DB, cfg *config.FaucetConfig) (*Faucet, error) {
@@ -99,24 +102,24 @@ func (s *Faucet) Start() {
 func (s *Faucet) pullTasks() {
 	log.Debug("faucet module: starting grab faucet task service...")
 	for {
-		if s.queue.Size() > s.cfg.QueueMaxSize {
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+		if s.queue.Size() > onchain.QueueSize {
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
-		tasks, err := s.getTasks(s.cfg.PullBatchCount)
+		tasks, err := s.getTasks(onchain.PullBatchCount)
 		if err != nil {
-			log.Error("faucet module: getTasks failed", err)
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+			log.Error("faucet module: getTasks failed, ", err)
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
 		if len(tasks) == 0 {
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
-		log.Debugf("faucet module: get %d facuet stasks\n", len(tasks))
+		log.Debugf("faucet module: get %d facuet stasks, ", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -129,89 +132,106 @@ func (s *Faucet) getTasks(count int) ([]biz.AddressTask, error) {
 
 func (s *Faucet) handleTasks() {
 	log.Debug("faucet module: starting handling faucet task service...")
+
+	ch := make(chan struct{}, s.cfg.Concurrency)
 	for {
-		var wg sync.WaitGroup
-
-		for i := 0; i < s.cfg.PushBatchCount; i++ {
-			elem, ok := s.queue.Dequeue()
-			if !ok {
-				continue
-			}
-
-			task, ok := elem.(biz.AddressTask)
-			if !ok {
-				log.Error("faucet module: element from queue is not a task")
-			}
-
-			var handleError = func(task biz.AddressTask, err error) {
-				log.Error("faucet module: transfer err", err)
-				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
-					// nonce is not match, update the nonce
-					s.updateNonce()
-				} else if strings.Contains(err.Error(), "connection refused") {
-					// client is disconnected
-					s.connect()
-				}
-				s.queue.Enqueue(task)
-			}
-
-			if task.AccountAddress == nil {
-				log.Error("faucet module: task AccountAddress is nil", task.ID)
-				continue
-			}
-
-			fromAddress := crypto.PubkeyToAddress(*s.publickKey)
-
-			// s.process(task)
-			artAmount := s.cfg.TransferAmount
-			log.Debugf("faucet module: transfering art from %s to %s for %d, amount %d\n", fromAddress.Hex(), *task.AccountAddress, task.ID, artAmount)
-			hashTransfer, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), artAmount, s.getNonce(), &s.cfg.TxConfig)
-			if err != nil {
-				handleError(task, err)
-				continue
-			}
-
-			nonce := s.getNonce()
-			opts := s.client.DefaultTxOpts(s.privateKey, fromAddress, &s.cfg.TxConfig)
-			opts.Nonce = big.NewInt(int64(nonce)) // we maintance the nonce ourself
-			toAddress := common.HexToAddress(*task.AccountAddress)
-			rugAmount := big.NewInt(1).Mul(big.NewInt(s.cfg.RugAmount), big.NewInt(UINT))
-			log.Debugf("faucet module: transfering rug from %s to %s for %d, amount %d\n", fromAddress.Hex(), toAddress.Hex(), task.ID, rugAmount)
-			txRug, err := s.rug.Transfer(opts, toAddress, rugAmount)
-			if err != nil {
-				handleError(task, err)
-				continue
-			}
-
-			wg.Add(1)
-			go func(task biz.AddressTask, hashTransfer, hashRug common.Hash) {
-				s.processReceipt(task, hashTransfer, hashRug)
-				wg.Done()
-			}(task, hashTransfer, txRug.Hash())
+		elem, ok := s.queue.Dequeue()
+		if !ok || elem == nil {
+			time.Sleep(onchain.DeQuequeWait)
+			continue
 		}
-		wg.Wait()
-		time.Sleep(time.Duration(s.cfg.PushInterval) * time.Millisecond)
+
+		task, ok := elem.(biz.AddressTask)
+		if !ok {
+			log.Error("faucet module: element from queue is not a task")
+			continue
+		}
+
+		var handleError = func(task biz.AddressTask, err error) {
+			// log.Error("faucet module: transfer err", err)
+			if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
+				// nonce is not match, try to reconnect and update the nonce
+				s.updateNetwork()
+			} else if strings.Contains(err.Error(), "connection refused") {
+				// client is disconnected
+				s.updateNetwork()
+			}
+			s.queue.Enqueue(task)
+		}
+
+		if task.AccountAddress == nil {
+			log.Error("faucet module: task AccountAddress is nil", task.ID)
+			continue
+		}
+
+		fromAddress := crypto.PubkeyToAddress(*s.publickKey)
+
+		// s.process(task)
+		artAmount := s.cfg.TransferAmount
+		log.Debugf("faucet module: transfering art from %s to %s for %d, amount %d", fromAddress.Hex(), *task.AccountAddress, task.ID, artAmount)
+		time.Sleep(onchain.PushSleep)
+		hashTransfer, err := s.client.Transfer(s.privateKey, common.HexToAddress(*task.AccountAddress), artAmount, s.getNonce(), &s.cfg.TxConfig)
+		if err != nil {
+			handleError(task, err)
+			continue
+		}
+
+		nonce := s.getNonce()
+		opts := s.client.DefaultTxOpts(s.privateKey, fromAddress, &s.cfg.TxConfig)
+		opts.Nonce = big.NewInt(int64(nonce)) // we maintance the nonce ourself
+		toAddress := common.HexToAddress(*task.AccountAddress)
+		rugAmount := big.NewInt(1).Mul(big.NewInt(s.cfg.RugAmount), big.NewInt(UINT))
+		log.Debugf("faucet module: transfering rug from %s to %s for %d, amount %d", fromAddress.Hex(), toAddress.Hex(), task.ID, rugAmount)
+		time.Sleep(onchain.PushSleep)
+		txRug, err := s.rug.Transfer(opts, toAddress, rugAmount)
+		if err != nil {
+			handleError(task, err)
+			continue
+		}
+
+		err = s.updateTask(task, memo(hashTransfer, txRug.Hash()), nil)
+		if err != nil {
+			log.Error("faucet module: update task failed", task.ID, err)
+		}
+
+		ch <- struct{}{}
+		go func(task biz.AddressTask, hashTransfer, hashRug common.Hash) {
+			s.processReceipt(task, hashTransfer, hashRug)
+			<-ch
+		}(task, hashTransfer, txRug.Hash())
 	}
 }
 
-func (s *Faucet) updateTask(task biz.AddressTask, memo string, status uint64) error {
+func (s *Faucet) updateTask(task biz.AddressTask, memo string, status *uint64) error {
 	req := &biz.UpdateTaskQuery{}
 	req.ID = task.ID
 	req.Txs = &memo
-	taskStatus := *task.TaskStatus
-	if status == 1 {
-		taskStatus = string(types.TaskStatusSuccess)
+	if status != nil {
+		taskStatus := string(types.TaskStatusFail)
+		if *status == 1 {
+			taskStatus = string(types.TaskStatusSuccess)
+		}
+		req.TaskStatus = &taskStatus
+		log.Debugf("faucet module: updating task, %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	} else {
-		taskStatus = string(types.TaskStatusFail)
+		log.Debugf("faucet module: updating task, %d, hash %s\n", req.ID, *req.Txs)
 	}
-	req.TaskStatus = &taskStatus
 
-	log.Debugf("faucet module: updating task, %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
 func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug common.Hash) {
-	log.Debugf("faucet module: getting receipt for task, %d, trasfer hash %s, rug hash %s\n", task.ID, hashTransfer.Hex(), hashRug.Hex())
+	var networkErr = func(err error) bool {
+		// log.Error("faucet module: get receipt err", err)
+		if strings.Contains(err.Error(), "connection refused") {
+			// client is disconnected
+			s.updateNetwork()
+			return true
+		}
+		return false
+	}
+
+	log.Debugf("faucet module: getting receipt for task, %d, trasfer hash %s, rug hash %s", task.ID, hashTransfer.Hex(), hashRug.Hex())
 	time.Sleep(time.Duration(s.cfg.BlockTime) * time.Millisecond)
 	// TODO handle timeout
 	var transferReceipt, rugReceipt *coretypes.Receipt
@@ -220,8 +240,10 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 		if transferReceipt == nil {
 			transferReceipt, err = s.client.TransactionReceipt(context.Background(), hashTransfer)
 			if err != nil {
-				log.Debug("faucet module: get receipt failed", hashTransfer.Hex(), err)
 				time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
+				if networkErr(err) {
+					i--
+				}
 				continue
 			}
 		}
@@ -229,8 +251,10 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 		if rugReceipt == nil {
 			rugReceipt, err = s.client.TransactionReceipt(context.Background(), hashRug)
 			if err != nil {
-				log.Debug("faucet module: get receipt failed", hashTransfer.Hex(), err)
 				time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
+				if networkErr(err) {
+					i--
+				}
 				continue
 			}
 		}
@@ -240,42 +264,71 @@ func (s *Faucet) processReceipt(task biz.AddressTask, hashTransfer, hashRug comm
 			if rugReceipt.Status != 1 {
 				status = rugReceipt.Status
 			}
-			memo := fmt.Sprintf("%s,%s", transferReceipt.TxHash.Hex(), rugReceipt.TxHash.Hex())
-			s.updateTask(task, memo, status)
+
+			s.updateTask(task, memo(hashTransfer, hashRug), &status)
 			return
 		}
 	}
-	log.Error("faucet module: failed to get receipt after reaching the upper limit of retry times")
-	memo := fmt.Sprintf("%s,%s", transferReceipt.TxHash.Hex(), rugReceipt.TxHash.Hex())
-	s.updateTask(task, memo, 0)
+	log.Errorf("faucet module: failed to get receipt after reaching the upper limit of retry times, task %d, hash %s\n", task.ID, memo(hashTransfer, hashRug))
+	status := uint64(0)
+
+	s.updateTask(task, memo(hashTransfer, hashRug), &status)
 }
 
-func (s *Faucet) updateNonce() {
-	log.Debug("faucet module: updating nonce")
-	accountAddress := crypto.PubkeyToAddress(*s.publickKey)
-	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
-	if err != nil {
-		log.Error("faucet module: get nonce failed")
-		// try to reconnect the client
-		s.connect()
-		time.Sleep(100 * time.Millisecond)
+func memo(hashes ...common.Hash) string {
+	if len(hashes) != 2 {
+		return ""
 	}
-	s.nonce = nonce
+	ret := fmt.Sprintf("%s,%s", hashes[0].Hex(), hashes[1].Hex())
+	return ret
 }
 
-func (s *Faucet) connect() {
-	log.Debug("faucet module: connecting client")
+func (s *Faucet) updateNetwork() {
+	if s.uptating.Load() {
+		return
+	}
+
+	log.Error("faucet module: network is not valid, updating network...")
+	s.uptating.Store(true)
+	defer s.uptating.Store(false)
+	for {
+		if s.connect() && s.updateContract() && s.updateNonce() {
+			log.Info("faucet module: network is connected")
+			return
+		}
+		time.Sleep(onchain.Reconnect)
+	}
+}
+
+func (s *Faucet) connect() bool {
+	// s.client.Close()
+
 	c, err := goclient.NewClient(s.url)
 	if err != nil {
 		log.Error("faucet module: connect failed")
-		return
+		return false
 	}
 	s.client = c
-	s.updateNonce()
+	return true
+}
 
-	instance, err := rug.NewRug(common.HexToAddress(s.cfg.RugAddress), c)
+func (s *Faucet) updateContract() bool {
+	instance, err := rug.NewRug(common.HexToAddress(s.cfg.RugAddress), s.client)
 	if err != nil {
-		log.Error("faucet module: load rug contract failed", err)
+		log.Error("faucet module: load rug contract failed,", err)
+		return false
 	}
 	s.rug = instance
+	return true
+}
+
+func (s *Faucet) updateNonce() bool {
+	accountAddress := crypto.PubkeyToAddress(*s.publickKey)
+	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
+	if err != nil {
+		log.Error("faucet module: get nonce failed, ", err)
+		return false
+	}
+	s.nonce = nonce
+	return true
 }

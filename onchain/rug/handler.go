@@ -7,6 +7,7 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -18,6 +19,7 @@ import (
 	"github.com/artela-network/galxe-integration/config"
 	"github.com/artela-network/galxe-integration/contracts/uniswapv2"
 	"github.com/artela-network/galxe-integration/goclient"
+	"github.com/artela-network/galxe-integration/onchain"
 
 	llq "github.com/emirpasic/gods/queues/linkedlistqueue"
 	log "github.com/sirupsen/logrus"
@@ -41,7 +43,8 @@ type Rug struct {
 	contract *uniswapv2.UniswapV2
 	cfg      *config.RugConfig
 
-	queue *llq.Queue
+	queue    *llq.Queue
+	uptating atomic.Bool
 }
 
 func NewRug(db *sql.DB, cfg *config.RugConfig) (*Rug, error) {
@@ -105,24 +108,24 @@ func (s *Rug) Start() {
 func (s *Rug) pullTasks() {
 	log.Debug("rug module: starting grab Rug task service...")
 	for {
-		if s.queue.Size() > s.cfg.QueueMaxSize {
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+		if s.queue.Size() > onchain.QueueSize {
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
-		tasks, err := s.getTasks(s.cfg.PullBatchCount)
+		tasks, err := s.getTasks(onchain.PullBatchCount)
 		if err != nil {
-			log.Error("getTasks failed", err)
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+			log.Error("rug module: getTasks failed", err)
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
 		if len(tasks) == 0 {
-			time.Sleep(time.Duration(s.cfg.PullInterval) * time.Millisecond)
+			time.Sleep(onchain.PullSleep)
 			continue
 		}
 
-		log.Debugf("rug module: get %d rug tasks\n", len(tasks))
+		log.Debugf("rug module: get %d rug tasks", len(tasks))
 		for _, task := range tasks {
 			s.queue.Enqueue(task)
 		}
@@ -134,72 +137,84 @@ func (s *Rug) getTasks(count int) ([]biz.AddressTask, error) {
 }
 
 func (s *Rug) handleTasks() {
-	log.Debug("starting handling Rug task service...")
+	log.Debug("rug module: starting handling Rug task service...")
+
+	ch := make(chan struct{}, s.cfg.Concurrency)
 	for {
-		var wg sync.WaitGroup
-
-		for i := 0; i < s.cfg.PushBatchCount; i++ {
-			elem, ok := s.queue.Dequeue()
-			if !ok || elem == nil {
-				continue
-			}
-
-			task, ok := elem.(biz.AddressTask)
-			if !ok {
-				log.Error("rug module: element from queue is not a task")
-				continue
-			}
-			// s.process(task)
-
-			log.Debug("rug module: processing task", task.ID)
-			hash, err := s.rug(task)
-			if err != nil {
-				log.Error("transfer err", err)
-				if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
-					// nonce is not match, update the nonce
-					s.updateNonce()
-				} else if strings.Contains(err.Error(), "connection refused") {
-					// client is disconnected
-					s.connect()
-				}
-				s.queue.Enqueue(task)
-				continue
-			}
-
-			wg.Add(1)
-			go func(task biz.AddressTask, hash common.Hash) {
-				s.processReceipt(task, hash)
-				wg.Done()
-			}(task, hash)
+		elem, ok := s.queue.Dequeue()
+		if !ok || elem == nil {
+			time.Sleep(onchain.DeQuequeWait)
+			continue
 		}
-		wg.Wait()
-		time.Sleep(time.Duration(s.cfg.PushInterval) * time.Millisecond)
+
+		task, ok := elem.(biz.AddressTask)
+		if !ok {
+			log.Error("rug module: element from queue is not a task")
+			continue
+		}
+		// s.process(task)
+
+		log.Debug("rug module: processing task", task.ID)
+		time.Sleep(onchain.PushSleep)
+		hash, err := s.rug(task)
+		if err != nil {
+			log.Error("transfer err", err)
+			if strings.Contains(err.Error(), "invalid nonce") || strings.Contains(err.Error(), "tx already in mempool") {
+				// nonce is not match, update the nonce
+				s.updateNetwork()
+			} else if strings.Contains(err.Error(), "connection refused") {
+				// client is disconnected
+				s.updateNetwork()
+			}
+			s.queue.Enqueue(task)
+			continue
+		}
+
+		err = s.updateTask(task, hash.Hex(), nil)
+		if err != nil {
+			log.Error("rug module: update task failed", task.ID, err)
+			// do not return, still try to get the receipt and update to db again
+		}
+
+		ch <- struct{}{}
+		go func(task biz.AddressTask, hash common.Hash) {
+			s.processReceipt(task, hash)
+			<-ch
+		}(task, hash)
 	}
 }
 
-func (s *Rug) updateTask(task biz.AddressTask, hash string, status uint64, getReceiptSuccess bool) error {
+func (s *Rug) updateTask(task biz.AddressTask, hash string, status *uint64) error {
 	req := &biz.UpdateTaskQuery{}
 	req.ID = task.ID
 	req.Txs = &hash
-	taskStatus := *task.TaskStatus
-	if getReceiptSuccess {
-		if status == 0 {
-			// The condition for completing the task is rug tx failed
+	if status != nil {
+		taskStatus := string(types.TaskStatusFail)
+		if *status == 1 {
 			taskStatus = string(types.TaskStatusSuccess)
-		} else {
-			taskStatus = string(types.TaskStatusFail)
 		}
+		req.TaskStatus = &taskStatus
+		log.Debugf("update rug task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	} else {
-		taskStatus = string(types.TaskStatusFail)
+		log.Debugf("update rug task: %d, hash %s\n", req.ID, *req.Txs)
 	}
-	req.TaskStatus = &taskStatus
 
-	log.Debugf("update rug task: %d, hash %s, status %s\n", req.ID, *req.Txs, *req.TaskStatus)
 	return biz.UpdateTask(s.db, req)
 }
 
 func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
 	log.Debug("rug module: getting receipt for", task.ID, hash.Hex())
+
+	var networkErr = func(err error) bool {
+		log.Error("faucet module: transfer err", err)
+		if strings.Contains(err.Error(), "connection refused") {
+			// client is disconnected
+			s.updateNetwork()
+			return true
+		}
+		return false
+	}
+
 	time.Sleep(time.Duration(s.cfg.BlockTime) * time.Millisecond)
 	// TODO handle timeout
 	for i := 0; i < 50; i++ {
@@ -207,46 +222,20 @@ func (s *Rug) processReceipt(task biz.AddressTask, hash common.Hash) {
 		if err != nil {
 			log.Debug("rug module: get receipt failed", hash.Hex(), err)
 			time.Sleep(time.Duration(s.cfg.GetReceiptInterval) * time.Millisecond)
+			if networkErr(err) {
+				i--
+			}
 			continue
 		}
-		s.updateTask(task, receipt.TxHash.Hex(), receipt.Status, true)
+		if receipt == nil {
+			continue
+		}
+		s.updateTask(task, hash.Hex(), &receipt.Status)
 		return
 	}
-	log.Error("rug module: failed to get receipt after reaching the upper limit of retry times")
-	s.updateTask(task, hash.Hex(), 0, false)
-}
-
-func (s *Rug) updateNonce() {
-	log.Debug("rug module: updating nonce")
-	accountAddress := crypto.PubkeyToAddress(*s.publickKey)
-	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
-	if err != nil {
-		log.Error("rug module: get nonce failed")
-		// try to reconnect the client
-		s.connect()
-		time.Sleep(100 * time.Millisecond)
-	}
-	log.Debug("rug module: new nonce", nonce)
-	s.nonce = nonce
-}
-
-func (s *Rug) connect() {
-	log.Debug("rug module: connecting client")
-	c, err := goclient.NewClient(s.url)
-	if err != nil {
-		log.Error("connect failed")
-		return
-	}
-	s.client = c
-	s.updateNonce()
-	contractAddress := common.HexToAddress(s.cfg.ContractAddress)
-	instance, err := uniswapv2.NewUniswapV2(contractAddress, c)
-	if err != nil {
-		log.Error("connect failed")
-		return
-	}
-	log.Debug("rug module: client is connected")
-	s.contract = instance
+	log.Errorf("rug module: failed to get receipt after reaching the upper limit of retry times, task %d, hash %s\n", task.ID, hash.Hex())
+	status := uint64(0)
+	s.updateTask(task, hash.Hex(), &status)
 }
 
 func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
@@ -265,7 +254,7 @@ func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
 	path[1] = common.HexToAddress(s.cfg.Path[1])
 	toAddress := fromAddress // rug tokens to the sender
 	amount := big.NewInt(1).Mul(big.NewInt(RugAmount), big.NewInt(UINT))
-	log.Debugf("rug module: SwapETHForExactTokens, from %s, to %s, amount %d\n", fromAddress.Hex(), toAddress.Hex(), amount)
+	log.Debugf("rug module: SwapETHForExactTokens, from %s, to %s, amount %d", fromAddress.Hex(), toAddress.Hex(), amount)
 	tx, err := s.contract.SwapETHForExactTokens(opts, amount, path, toAddress, big.NewInt(int64(time.Now().Second())+10000))
 	if err != nil {
 		log.Debug("rug module: submit rug failed", task.ID, err)
@@ -273,4 +262,56 @@ func (s *Rug) rug(task biz.AddressTask) (common.Hash, error) {
 	}
 
 	return tx.Hash(), nil
+}
+
+func (s *Rug) updateNetwork() {
+	if s.uptating.Load() {
+		return
+	}
+
+	log.Error("rug module: network is not valid, updating network...")
+	s.uptating.Store(true)
+	defer s.uptating.Store(false)
+	for {
+		if s.connect() && s.updateNonce() && s.updateContract() {
+			log.Info("rug module: network is connected")
+			return
+		}
+		time.Sleep(onchain.Reconnect)
+	}
+}
+
+func (s *Rug) connect() bool {
+	// s.client.Close()
+
+	c, err := goclient.NewClient(s.url)
+	if err != nil {
+		log.Error("rug module: connect failed ", err)
+		return false
+	}
+	s.client = c
+	return true
+}
+
+func (s *Rug) updateContract() bool {
+	contractAddress := common.HexToAddress(s.cfg.ContractAddress)
+	instance, err := uniswapv2.NewUniswapV2(contractAddress, s.client)
+	if err != nil {
+		log.Error("rug module: load uniswapV2 failed ", err)
+		return false
+	}
+
+	s.contract = instance
+	return true
+}
+
+func (s *Rug) updateNonce() bool {
+	accountAddress := crypto.PubkeyToAddress(*s.publickKey)
+	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
+	if err != nil {
+		log.Error("rug module: get nonce failed ", err)
+		return false
+	}
+	s.nonce = nonce
+	return true
 }

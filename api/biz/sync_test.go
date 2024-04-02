@@ -22,8 +22,7 @@ func TestSend(t *testing.T) {
 		SecwarexUrl: "",
 	}
 	GoPlus_Config = config
+
 	sign, s, err := createSign(body)
-	fmt.Println(sign)
-	fmt.Println(s)
-	fmt.Println(err)
+	fmt.Print(sign, s, err)
 }

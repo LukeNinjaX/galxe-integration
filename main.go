@@ -19,6 +19,7 @@ import (
 	"github.com/artela-network/galxe-integration/db"
 	"github.com/artela-network/galxe-integration/logging"
 	_ "github.com/artela-network/galxe-integration/logging"
+	cleaner "github.com/artela-network/galxe-integration/onchain/clearner"
 	"github.com/artela-network/galxe-integration/onchain/faucet"
 	"github.com/artela-network/galxe-integration/onchain/rug"
 	"github.com/artela-network/galxe-integration/onchain/updater"
@@ -87,6 +88,9 @@ func main() {
 		os.Exit(-1)
 	}
 	updaterServ.Start()
+
+	cleanerServ := cleaner.NewCleaner(conn)
+	cleanerServ.Start()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGKILL, syscall.SIGINT)
