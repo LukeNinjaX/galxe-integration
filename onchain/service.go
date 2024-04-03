@@ -144,6 +144,10 @@ func (s *Base) DefaultOpts(txConf *config.TxConfig) *bind.TransactOpts {
 }
 
 func (s *Base) Start() {
+	if !s.conf.Enable {
+		return
+	}
+
 	go s.pullTasks()
 	go s.handleTasks()
 }

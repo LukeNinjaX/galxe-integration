@@ -97,6 +97,7 @@ func (c *TxConfig) FillDefaults() {
 }
 
 type OnChain struct {
+	Enable             bool   `json:"enable"`
 	URL                string `json:"url"`
 	KeyFile            string `json:"keyfile"`
 	BlockTime          int    `json:"block_time"`
