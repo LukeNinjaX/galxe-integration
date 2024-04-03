@@ -102,6 +102,7 @@ type OnChain struct {
 	BlockTime          int    `json:"block_time"`
 	GetReceiptInterval int    `json:"get_receipt_interval"`
 	Concurrency        int    `json:"concurrency"`
+	SendInterval       int    `json:"send_interval"`
 }
 
 func (c *OnChain) FillDefaults() {
@@ -115,6 +116,10 @@ func (c *OnChain) FillDefaults() {
 
 	if c.Concurrency <= 0 {
 		c.Concurrency = 200
+	}
+
+	if c.SendInterval <= 0 {
+		c.SendInterval = 20 // default the send interval to 20, to ensure the security of the chain.
 	}
 }
 

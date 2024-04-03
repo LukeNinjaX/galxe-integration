@@ -26,7 +26,7 @@ type Faucet struct {
 func NewFaucet(db *sql.DB, conf *config.FaucetConfig) (*Faucet, error) {
 	conf.FillDefaults()
 
-	base, err := onchain.NewBase(db, &conf.OnChain)
+	base, err := onchain.NewBase(db, &conf.OnChain, false)
 	if err != nil {
 		return nil, err
 	}
@@ -38,9 +38,9 @@ func NewFaucet(db *sql.DB, conf *config.FaucetConfig) (*Faucet, error) {
 
 	f.refreshContract()
 
-	base.RegisterGetTasks(f.mockGetTasks) // base.RegisterGetTasks(f.getTasks)
+	base.RegisterGetTasks(f.getTasks)
 	base.RegisterSend(f.send)
-	base.RegisterUpdateTask(f.mockUpdateTask) // base.RegisterUpdateTask(f.updateTask)
+	base.RegisterUpdateTask(f.updateTask)
 	base.RegisterRefreshNetwork(f.refreshContract)
 	return f, nil
 }
@@ -56,6 +56,11 @@ func (s *Faucet) refreshContract() bool {
 }
 
 func (s *Faucet) send(task biz.AddressTask) (hashs []common.Hash, err error) {
+	if task.AccountAddress == nil {
+		log.Error("Base module: task AccountAddress is nil", task.ID)
+		return nil, onchain.ErrInvalidTask
+	}
+
 	hashTransfer, err := s.Client().Transfer(
 		s.Privatekey(),
 		common.HexToAddress(*task.AccountAddress),

@@ -42,11 +42,12 @@ type Base struct {
 	getTasks       GetTasks
 	updateTask     UpdateTask
 	refreshNetwork RefreshNetwork
+
+	query bool // if this service is a query service
 }
 
-func NewBase(db *sql.DB, conf *config.OnChain) (*Base, error) {
+func NewBase(db *sql.DB, conf *config.OnChain, query bool) (*Base, error) {
 	url := conf.URL
-	keyfile := conf.KeyFile
 
 	conf.FillDefaults()
 
@@ -55,27 +56,33 @@ func NewBase(db *sql.DB, conf *config.OnChain) (*Base, error) {
 		return nil, err
 	}
 
-	privKey, pubKey, err := goclient.ReadKey(keyfile)
-	if err != nil {
-		return nil, err
+	base := &Base{
+		url:    url,
+		db:     db,
+		client: c,
+		queue:  llq.New(),
+		conf:   conf,
+		query:  query,
 	}
 
-	accountAddress := crypto.PubkeyToAddress(*pubKey)
-	nonce, err := goclient.Client.NonceAt(*c, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
-	if err != nil {
-		return nil, err
+	if !query {
+		keyfile := conf.KeyFile
+		privKey, pubKey, err := goclient.ReadKey(keyfile)
+		if err != nil {
+			return nil, err
+		}
+
+		accountAddress := crypto.PubkeyToAddress(*pubKey)
+		nonce, err := goclient.Client.NonceAt(*c, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
+		if err != nil {
+			return nil, err
+		}
+		base.privateKey = privKey
+		base.publicKey = pubKey
+		base.nonce = nonce
 	}
 
-	return &Base{
-		url:        url,
-		db:         db,
-		client:     c,
-		privateKey: privKey,
-		publicKey:  pubKey,
-		nonce:      nonce,
-		queue:      llq.New(),
-		conf:       conf,
-	}, nil
+	return base, nil
 }
 
 func (s *Base) Client() *goclient.Client {
@@ -112,6 +119,10 @@ func (s *Base) RegisterRefreshNetwork(fn RefreshNetwork) {
 }
 
 func (s *Base) GetNonce() uint64 {
+	if s.query {
+		return 0
+	}
+
 	s.Lock()
 	defer s.Unlock()
 	ret := s.nonce
@@ -120,6 +131,10 @@ func (s *Base) GetNonce() uint64 {
 }
 
 func (s *Base) DefaultOpts(txConf *config.TxConfig) *bind.TransactOpts {
+	if s.query {
+		return nil
+	}
+
 	fromAddress := crypto.PubkeyToAddress(*s.publicKey)
 	nonce := s.GetNonce()
 
@@ -186,18 +201,19 @@ func (s *Base) handleTasks() {
 				// client is disconnected
 				s.updateNetwork()
 			}
-			s.queue.Enqueue(task)
+			if err != ErrInvalidTask {
+				s.queue.Enqueue(task)
+			}
 		}
 
-		if task.AccountAddress == nil {
-			log.Error("Base module: task AccountAddress is nil", task.ID)
-			continue
-		}
+		ch <- struct{}{}
 
-		time.Sleep(PushSleep)
+		next := time.Now().Add(time.Duration(s.conf.SendInterval) * time.Millisecond)
 		hashs, err := s.send(task)
+		time.Sleep(time.Until(next))
 		if err != nil {
 			handleError(task, err)
+			<-ch
 			continue
 		}
 
@@ -206,7 +222,6 @@ func (s *Base) handleTasks() {
 			log.Error("Base module: update task failed", task.ID, err)
 		}
 
-		ch <- struct{}{}
 		go func(task biz.AddressTask, hashs []common.Hash) {
 			s.processReceipt(task, hashs)
 			<-ch
@@ -293,6 +308,10 @@ func (s *Base) connect() bool {
 }
 
 func (s *Base) updateNonce() bool {
+	if s.query {
+		return true
+	}
+
 	accountAddress := crypto.PubkeyToAddress(*s.publicKey)
 	nonce, err := goclient.Client.NonceAt(*s.client, context.Background(), accountAddress, big.NewInt(rpc.LatestBlockNumber.Int64()))
 	if err != nil {

@@ -27,7 +27,7 @@ type Rug struct {
 func NewRug(db *sql.DB, conf *config.RugConfig) (*Rug, error) {
 	conf.FillDefaults()
 
-	base, err := onchain.NewBase(db, &conf.OnChain)
+	base, err := onchain.NewBase(db, &conf.OnChain, false)
 	if err != nil {
 		return nil, err
 	}
@@ -39,9 +39,9 @@ func NewRug(db *sql.DB, conf *config.RugConfig) (*Rug, error) {
 
 	f.refreshContract()
 
-	base.RegisterGetTasks(f.mockGetTasks) // base.RegisterGetTasks(f.getTasks)
+	base.RegisterGetTasks(f.getTasks)
 	base.RegisterSend(f.send)
-	base.RegisterUpdateTask(f.mockUpdateTask) // base.RegisterUpdateTask(f.updateTask)
+	base.RegisterUpdateTask(f.updateTask)
 	base.RegisterRefreshNetwork(f.refreshContract)
 	return f, nil
 }
@@ -58,6 +58,11 @@ func (s *Rug) refreshContract() bool {
 }
 
 func (s *Rug) send(task biz.AddressTask) (hashs []common.Hash, err error) {
+	if task.AccountAddress == nil {
+		log.Error("Base module: task AccountAddress is nil", task.ID)
+		return nil, onchain.ErrInvalidTask
+	}
+
 	log.Debug("rug module: running rug for", task.ID)
 
 	opts := s.DefaultOpts(&s.conf.TxConfig)

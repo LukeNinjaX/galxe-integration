@@ -1,6 +1,7 @@
 package onchain
 
 import (
+	"errors"
 	"time"
 
 	"github.com/artela-network/galxe-integration/api/biz"
@@ -19,7 +20,7 @@ const (
 	RugAmount = 10000000
 
 	PullSleep = 100 * time.Millisecond
-	PushSleep = 20 * time.Millisecond
+	PushSleep = 50 * time.Millisecond
 
 	DeQuequeWait = 100 * time.Millisecond
 
@@ -30,4 +31,8 @@ const (
 
 	CleanDBInterval = 10 * time.Minute
 	MaxRetry        = 50
+)
+
+var (
+	ErrInvalidTask = errors.New("task is not valid")
 )

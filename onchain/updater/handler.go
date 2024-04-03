@@ -2,7 +2,6 @@ package updater
 
 import (
 	"database/sql"
-	"errors"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -23,7 +22,7 @@ type Updater struct {
 func NewUpdater(db *sql.DB, conf *config.UpdaterConfig) (*Updater, error) {
 	conf.FillDefaults()
 
-	base, err := onchain.NewBase(db, &conf.OnChain)
+	base, err := onchain.NewBase(db, &conf.OnChain, true)
 	if err != nil {
 		return nil, err
 	}
@@ -35,16 +34,16 @@ func NewUpdater(db *sql.DB, conf *config.UpdaterConfig) (*Updater, error) {
 
 	f.refreshContract()
 
-	base.RegisterGetTasks(f.mockGetTasks) // base.RegisterGetTasks(f.getTasks)
+	base.RegisterGetTasks(f.getTasks)
 	base.RegisterSend(f.send)
-	base.RegisterUpdateTask(f.mockUpdateTask) // base.RegisterUpdateTask(f.updateTask)
+	base.RegisterUpdateTask(f.updateTask)
 	base.RegisterRefreshNetwork(f.refreshContract)
 	return f, nil
 }
 
 func (s *Updater) send(task biz.AddressTask) (hashs []common.Hash, err error) {
 	if task.Txs == nil {
-		return nil, errors.New("tasks is not valid, txs cannot be empty")
+		return nil, onchain.ErrInvalidTask
 	}
 	hash := common.HexToHash(*task.Txs)
 	return []common.Hash{hash}, nil
