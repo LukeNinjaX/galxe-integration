@@ -26,6 +26,10 @@ type Faucet struct {
 func NewFaucet(db *sql.DB, conf *config.FaucetConfig) (*Faucet, error) {
 	conf.FillDefaults()
 
+	if !conf.Enable {
+		return &Faucet{}, nil
+	}
+
 	base, err := onchain.NewBase(db, &conf.OnChain, false)
 	if err != nil {
 		return nil, err

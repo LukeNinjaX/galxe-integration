@@ -27,6 +27,10 @@ type Rug struct {
 func NewRug(db *sql.DB, conf *config.RugConfig) (*Rug, error) {
 	conf.FillDefaults()
 
+	if !conf.Enable {
+		return &Rug{}, nil
+	}
+
 	base, err := onchain.NewBase(db, &conf.OnChain, false)
 	if err != nil {
 		return nil, err

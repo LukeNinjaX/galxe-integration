@@ -22,6 +22,10 @@ type Updater struct {
 func NewUpdater(db *sql.DB, conf *config.UpdaterConfig) (*Updater, error) {
 	conf.FillDefaults()
 
+	if !conf.Enable {
+		return &Updater{}, nil
+	}
+
 	base, err := onchain.NewBase(db, &conf.OnChain, true)
 	if err != nil {
 		return nil, err
