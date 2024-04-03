@@ -22,8 +22,8 @@ func TestTransfer(t *testing.T) {
 			KeyFile: "../../rug.txt",
 		},
 		TransferAmount: 1,
-		RugAmount:      1000000000,
-		RugAddress:     "0x8997ec639d49D2F08EC0e6b858f36317680A6eE7",
+		RugAmount:      20000000000000,
+		RugAddress:     "0xb8D2C890F1c3412dbFa992D03a4a36BbAF6B58D7",
 	}
 	cfg.FillDefaults()
 

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"encoding/json"
 	"flag"
 	"io"
@@ -13,13 +12,10 @@ import (
 
 	log "github.com/sirupsen/logrus"
 
-	"github.com/artela-network/galxe-integration/api"
 	"github.com/artela-network/galxe-integration/api/biz"
 	"github.com/artela-network/galxe-integration/config"
-	"github.com/artela-network/galxe-integration/db"
 	"github.com/artela-network/galxe-integration/logging"
 	_ "github.com/artela-network/galxe-integration/logging"
-	cleaner "github.com/artela-network/galxe-integration/onchain/clearner"
 	"github.com/artela-network/galxe-integration/onchain/faucet"
 	"github.com/artela-network/galxe-integration/onchain/rug"
 	"github.com/artela-network/galxe-integration/onchain/updater"
@@ -39,16 +35,16 @@ func main() {
 
 	log.Info("starting the service...")
 
-	ctx, cancel := context.WithCancel(context.Background())
+	// ctx, cancel := context.WithCancel(context.Background())
 
 	conf := loadConfig(*serviceConf)
 	biz.GoPlus_Config = conf.GoPlus
 	biz.Recaptcha_Config = conf.Recaptcha
 
-	conn, driver, err := db.GetDB(ctx, conf.DB)
-	if err != nil {
-		log.Fatalf("failed to connect to db: %v", err)
-	}
+	// conn, driver, err := db.GetDB(ctx, conf.DB)
+	// if err != nil {
+	// 	log.Fatalf("failed to connect to db: %v", err)
+	// }
 
 	// indexers := make([]common.Indexer, len(conf.Indexers))
 	// chainFetcher, err := fetcher.NewFetcher(ctx, conf.Fetcher, driver, conn)
@@ -65,41 +61,49 @@ func main() {
 	// }
 	// chainFetcher.Start()
 
-	apiServer := api.NewServer(ctx, conf, driver, conn, nil, nil)
-	apiServer.Start()
+	// apiServer := api.NewServer(ctx, conf, driver, conn, nil, nil)
+	// apiServer.Start()
 
-	rugServ, err := rug.NewRug(conn, conf.Rug)
+	go MockAddTasks()
+
+	rugServ, err := rug.NewRug(nil, conf.Rug)
 	if err != nil {
 		log.Error("failed to start rug service", err)
 		os.Exit(-1)
 	}
+	rugServ.RegisterGetTasks(mockGetTasks)     // base.RegisterGetTasks(f.getTasks)
+	rugServ.RegisterUpdateTask(mockUpdateTask) // base.RegisterUpdateTask(f.updateTask)
 	rugServ.Start()
 
-	faucetServ, err := faucet.NewFaucet(conn, conf.Faucet)
+	faucetServ, err := faucet.NewFaucet(nil, conf.Faucet)
 	if err != nil {
 		log.Error("failed to start faucet service", err)
 		os.Exit(-1)
 	}
+	faucetServ.RegisterGetTasks(mockGetTasks)     // base.RegisterGetTasks(f.getTasks)
+	faucetServ.RegisterUpdateTask(mockUpdateTask) // base.RegisterUpdateTask(f.updateTask)
 	faucetServ.Start()
 
-	updaterServ, err := updater.NewUpdater(conn, conf.Updater)
+	updaterServ, err := updater.NewUpdater(nil, conf.Updater)
 	if err != nil {
 		log.Error("failed to start updater service", err)
 		os.Exit(-1)
 	}
+	updaterServ.RegisterGetTasks(mockGetTasks)     // base.RegisterGetTasks(f.getTasks)
+	updaterServ.RegisterUpdateTask(mockUpdateTask) // base.RegisterUpdateTask(f.updateTask)
 	updaterServ.Start()
 
-	cleanerServ := cleaner.NewCleaner(conn)
-	cleanerServ.Start()
+	// cleanerServ := cleaner.NewCleaner(conn)
+	// cleanerServ.Start()
 
 	c := make(chan os.Signal, 1)
 	signal.Notify(c, syscall.SIGHUP, syscall.SIGKILL, syscall.SIGINT)
 
 	<-c
 
-	apiServer.Stop()
+	// apiServer.Stop()
 
-	cancel()
+	// cancel()
 
 	log.Info("service exited")
 }
