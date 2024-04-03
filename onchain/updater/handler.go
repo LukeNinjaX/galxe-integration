@@ -68,7 +68,7 @@ func (s *Updater) updateTask(task biz.AddressTask, hashs []common.Hash, status *
 	req.ID = task.ID
 	if status != nil {
 		taskStatus := string(types.TaskStatusFail)
-		if *status == 0 { // this task is expected to fail
+		if *status == 1 {
 			taskStatus = string(types.TaskStatusSuccess)
 		}
 		req.TaskStatus = &taskStatus
