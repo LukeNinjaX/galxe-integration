@@ -30,3 +30,6 @@ gen
 go.work
 
 config.json
+goclient/_address.txt
+goclient/_keys.txt
+
